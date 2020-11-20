@@ -1,0 +1,16 @@
+[package]
+name = "wral"
+version = "0.1.0"
+description = "Write ahead logging for durability"
+repository = "https://github.com/bnclabs/wral"
+keywords = ["wal", "db"]
+authors = ["prataprc <prataprc@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+documentation = "https://docs.rs/wral/"
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+mkit = { path = "../mkit" }

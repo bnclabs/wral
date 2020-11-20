@@ -1,0 +1,6 @@
+*.swp
+Cargo.lock
+core
+arc.check
+rc.check
+test.out
