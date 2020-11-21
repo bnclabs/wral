@@ -1,5 +1,7 @@
 //! Package implement Write-Ahead-Logging.
 
+use mkit;
+
 use std::{error, fmt, result};
 
 /// Short form to compose Error values.
@@ -48,7 +50,10 @@ macro_rules! err_at {
     }};
 }
 
+pub mod batch;
 pub mod entry;
+pub mod state;
+pub mod util;
 
 /// Type alias for Result return type, used by this package.
 pub type Result<T> = result::Result<T, Error>;
@@ -84,3 +89,14 @@ impl fmt::Debug for Error {
 }
 
 impl error::Error for Error {}
+
+impl From<mkit::Error> for Error {
+    fn from(err: mkit::Error) -> Error {
+        match err {
+            mkit::Error::Fatal(p, m) => Error::Fatal(p, m),
+            mkit::Error::FailConvert(p, m) => Error::FailConvert(p, m),
+            mkit::Error::IOError(p, m) => Error::IOError(p, m),
+            mkit::Error::FailCbor(p, m) => Error::FailCbor(p, m),
+        }
+    }
+}
