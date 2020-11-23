@@ -14,3 +14,4 @@ edition = "2018"
 
 [dependencies]
 mkit = { path = "../mkit" }
+log = "0.4.8"

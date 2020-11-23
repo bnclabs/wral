@@ -50,10 +50,12 @@ macro_rules! err_at {
     }};
 }
 
-pub mod batch;
-pub mod entry;
-pub mod state;
-pub mod util;
+mod batch;
+mod entry;
+mod files;
+mod journal;
+mod state;
+mod util;
 
 /// Type alias for Result return type, used by this package.
 pub type Result<T> = result::Result<T, Error>;
@@ -67,6 +69,7 @@ pub enum Error {
     FailCbor(String, String),
     IOError(String, String),
     Fatal(String, String),
+    Invalid(String, String),
 }
 
 impl fmt::Display for Error {
@@ -78,6 +81,7 @@ impl fmt::Display for Error {
             FailCbor(p, msg) => write!(f, "{} FailCbor: {}", p, msg),
             IOError(p, msg) => write!(f, "{} IOError: {}", p, msg),
             Fatal(p, msg) => write!(f, "{} Fatal: {}", p, msg),
+            Invalid(p, msg) => write!(f, "{} Invalid: {}", p, msg),
         }
     }
 }

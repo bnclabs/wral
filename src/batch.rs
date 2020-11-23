@@ -24,11 +24,6 @@ impl<S> Worker<S> {
         }
     }
 
-    pub fn add_index(&mut self, index: Index) -> Result<()> {
-        self.index.push(index);
-        Ok(())
-    }
-
     pub fn add_entry(&mut self, entry: Entry) -> Result<()>
     where
         S: State,
@@ -56,16 +51,11 @@ impl<S> Worker<S> {
         self.index.len()
     }
 
-    /// log_file and index_file must have been opened in "append" mode.
-    pub fn flush(
-        &mut self,
-        log_file: &mut fs::File,
-        index_file: Option<&mut fs::File>,
-    ) -> Result<()>
+    pub fn flush(&mut self, file: &mut fs::File) -> Result<()>
     where
         S: Clone + TryInto<Cbor, Error = mkit::Error>,
     {
-        let fpos = err_at!(IOError, log_file.metadata())?.len();
+        let fpos = err_at!(IOError, file.metadata())?.len();
         let batch = match self.entries.len() {
             0 => return Ok(()),
             _ => Batch {
@@ -80,24 +70,18 @@ impl<S> Worker<S> {
         let last_seqno = batch.last_seqno;
         let length = {
             let data = util::encode_cbor(batch)?;
-            util::sync_write(log_file, &data)?;
+            util::sync_write(file, &data)?;
             data.len()
         };
 
-        let index = {
-            let index = Index::new(fpos, length, first_seqno, last_seqno);
-            match index_file {
-                Some(index_file) => {
-                    let data = util::encode_cbor(index.clone())?;
-                    util::sync_write(index_file, &data)?;
-                }
-                None => (),
-            }
-            index
-        };
-        self.index.push(index);
+        self.index
+            .push(Index::new(fpos, length, first_seqno, last_seqno));
 
         Ok(())
+    }
+
+    pub fn unwrap(self) -> (Vec<Index>, Vec<Entry>, S) {
+        (self.index, self.entries, self.state)
     }
 }
 
@@ -108,7 +92,7 @@ pub struct Batch {
     first_seqno: u64,
     // index-seqno of last entry in this batch.
     last_seqno: u64,
-    // state as serialized bytes, shall in cbor format.
+    // state as serialized bytes, shall be in cbor format.
     state: Vec<u8>,
     // list of entries in this batch.
     entries: Vec<Entry>,
@@ -158,22 +142,37 @@ impl From<Vec<Entry>> for Batch {
 impl Batch {
     const ID: u64 = 0x1;
 
+    #[inline]
     pub fn to_seqno_range(&self) -> ops::RangeInclusive<u64> {
         ops::RangeInclusive::new(self.first_seqno, self.last_seqno)
     }
 
+    #[inline]
     pub fn to_state(&self) -> Vec<u8> {
         self.state.to_vec()
     }
 
+    #[inline]
     pub fn as_state(&self) -> &[u8] {
         &self.state
     }
 
+    #[inline]
+    pub fn to_first_seqno(&self) -> u64 {
+        self.first_seqno
+    }
+
+    #[inline]
+    pub fn to_last_seqno(&self) -> u64 {
+        self.last_seqno
+    }
+
+    #[inline]
     pub fn to_entries(&self) -> Vec<Entry> {
         self.entries.to_vec()
     }
 
+    #[inline]
     pub fn as_entries(&self) -> &[Entry] {
         &self.entries
     }
@@ -195,12 +194,17 @@ pub struct Index {
 impl Index {
     const ID: u64 = 0x1;
 
-    fn new(fpos: u64, length: usize, first_seqno: u64, last_seqno: u64) -> Index {
+    pub fn new(fpos: u64, length: usize, first_seqno: u64, last_seqno: u64) -> Index {
         Index {
             fpos,
             length,
             first_seqno,
             last_seqno,
         }
+    }
+
+    #[inline]
+    pub fn to_last_seqno(&self) -> u64 {
+        self.last_seqno
     }
 }
