@@ -7,11 +7,11 @@ use std::{
     fs, ops, result,
 };
 
-use crate::{entry::Entry, state::State, util, Error, Result};
+use crate::{entry, state, util, Error, Result};
 
 pub struct Worker<S> {
     index: Vec<Index>,
-    entries: Vec<Entry>,
+    entries: Vec<entry::Entry>,
     state: S,
 }
 
@@ -24,30 +24,32 @@ impl<S> Worker<S> {
         }
     }
 
-    pub fn add_entry(&mut self, entry: Entry) -> Result<()>
+    pub fn add_entry(&mut self, entry: entry::Entry) -> Result<()>
     where
-        S: State,
+        S: state::State,
     {
         self.state.on_add_entry(&entry)?;
         self.entries.push(entry);
         Ok(())
     }
+}
 
+impl<S> Worker<S> {
     pub fn to_first_seqno(&self) -> Option<u64> {
         match self.entries.len() {
             0 => self.index.first().map(|index| index.first_seqno),
-            _ => self.entries.first().map(Entry::to_seqno),
+            _ => self.entries.first().map(entry::Entry::to_seqno),
         }
     }
 
     pub fn to_last_seqno(&self) -> Option<u64> {
         match self.entries.len() {
             0 => self.index.last().map(|index| index.last_seqno),
-            _ => self.entries.last().map(Entry::to_seqno),
+            _ => self.entries.last().map(entry::Entry::to_seqno),
         }
     }
 
-    pub fn len(&self) -> usize {
+    pub fn len_batches(&self) -> usize {
         self.index.len()
     }
 
@@ -59,8 +61,8 @@ impl<S> Worker<S> {
         let batch = match self.entries.len() {
             0 => return Ok(()),
             _ => Batch {
-                first_seqno: self.entries.first().map(Entry::to_seqno).unwrap(),
-                last_seqno: self.entries.last().map(Entry::to_seqno).unwrap(),
+                first_seqno: self.entries.first().map(entry::Entry::to_seqno).unwrap(),
+                last_seqno: self.entries.last().map(entry::Entry::to_seqno).unwrap(),
                 state: util::encode_cbor(self.state.clone())?,
                 entries: self.entries.drain(..).collect(),
             },
@@ -80,7 +82,7 @@ impl<S> Worker<S> {
         Ok(())
     }
 
-    pub fn unwrap(self) -> (Vec<Index>, Vec<Entry>, S) {
+    pub fn unwrap(self) -> (Vec<Index>, Vec<entry::Entry>, S) {
         (self.index, self.entries, self.state)
     }
 }
@@ -95,7 +97,7 @@ pub struct Batch {
     // state as serialized bytes, shall be in cbor format.
     state: Vec<u8>,
     // list of entries in this batch.
-    entries: Vec<Entry>,
+    entries: Vec<entry::Entry>,
 }
 
 impl Display for Batch {
@@ -128,11 +130,11 @@ impl Ord for Batch {
     }
 }
 
-impl From<Vec<Entry>> for Batch {
-    fn from(entries: Vec<Entry>) -> Batch {
+impl From<Vec<entry::Entry>> for Batch {
+    fn from(entries: Vec<entry::Entry>) -> Batch {
         Batch {
-            first_seqno: entries.first().map(Entry::to_seqno).unwrap_or(0),
-            last_seqno: entries.last().map(Entry::to_seqno).unwrap_or(0),
+            first_seqno: entries.first().map(entry::Entry::to_seqno).unwrap_or(0),
+            last_seqno: entries.last().map(entry::Entry::to_seqno).unwrap_or(0),
             state: Vec::default(),
             entries,
         }
@@ -168,12 +170,12 @@ impl Batch {
     }
 
     #[inline]
-    pub fn to_entries(&self) -> Vec<Entry> {
+    pub fn to_entries(&self) -> Vec<entry::Entry> {
         self.entries.to_vec()
     }
 
     #[inline]
-    pub fn as_entries(&self) -> &[Entry] {
+    pub fn as_entries(&self) -> &[entry::Entry] {
         &self.entries
     }
 }

@@ -29,7 +29,7 @@ pub fn unwrap_filename(file: ffi::OsString) -> Option<(String, usize)> {
     }?;
 
     match parts[..] {
-        [name, "journal", num] => {
+        ["journal", num] => {
             let num: usize = err_at!(FailConvert, num.parse()).ok()?;
             Some((name.to_string(), num))
         }

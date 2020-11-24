@@ -1,5 +1,8 @@
 //! Package implement Write-Ahead-Logging.
 
+#![feature(unboxed_closures)]
+#![feature(fn_traits)]
+
 use mkit;
 
 use std::{error, fmt, result};
@@ -56,6 +59,10 @@ mod files;
 mod journal;
 mod state;
 mod util;
+mod wral;
+mod writer;
+
+pub use wral::Wral;
 
 /// Type alias for Result return type, used by this package.
 pub type Result<T> = result::Result<T, Error>;
@@ -70,6 +77,8 @@ pub enum Error {
     IOError(String, String),
     Fatal(String, String),
     Invalid(String, String),
+    IPCFail(String, String),
+    ThreadFail(String, String),
 }
 
 impl fmt::Display for Error {
@@ -82,6 +91,8 @@ impl fmt::Display for Error {
             IOError(p, msg) => write!(f, "{} IOError: {}", p, msg),
             Fatal(p, msg) => write!(f, "{} Fatal: {}", p, msg),
             Invalid(p, msg) => write!(f, "{} Invalid: {}", p, msg),
+            IPCFail(p, msg) => write!(f, "{} IPCFail: {}", p, msg),
+            ThreadFail(p, msg) => write!(f, "{} ThreadFail: {}", p, msg),
         }
     }
 }
@@ -101,6 +112,8 @@ impl From<mkit::Error> for Error {
             mkit::Error::FailConvert(p, m) => Error::FailConvert(p, m),
             mkit::Error::IOError(p, m) => Error::IOError(p, m),
             mkit::Error::FailCbor(p, m) => Error::FailCbor(p, m),
+            mkit::Error::IPCFail(p, m) => Error::IPCFail(p, m),
+            mkit::Error::ThreadFail(p, m) => Error::ThreadFail(p, m),
         }
     }
 }

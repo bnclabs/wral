@@ -1,11 +1,13 @@
-use log::debug;
-use mkit::cbor::Cbor;
+use log::{debug, error};
+use mkit::{self, cbor::Cbor};
 
 use std::{convert::TryFrom, convert::TryInto, ffi, fs, path};
 
-use crate::{batch, entry, files, Error, Result};
+use crate::{batch, entry, files, state, Error, Result};
 
 pub(crate) struct Journal<S> {
+    name: String,
+    num: usize,
     file_path: ffi::OsString, // dir/{name}-journal-{num}.dat
     inner: InnerJournal<S>,
 }
@@ -28,16 +30,11 @@ enum InnerJournal<S> {
 }
 
 impl<S> Journal<S> {
-    pub fn start_journal(
-        dir: ffi::OsString,
-        name: &str,
-        num: usize,
-        state: S,
-    ) -> Result<Journal<S>> {
+    pub fn start_journal(name: &str, dir: &ffi::OsStr, num: usize, state: S) -> Result<Journal<S>> {
         let file_path: path::PathBuf = {
             let name: &str = name.as_ref();
             let file: ffi::OsString = files::make_filename(name.to_string(), num);
-            [dir, file].iter().collect()
+            [dir, &file].iter().collect()
         };
 
         fs::remove_file(&file_path).ok(); // cleanup a single journal file
@@ -49,6 +46,8 @@ impl<S> Journal<S> {
         debug!(target: "wral", "start_journal {:?}", file_path);
 
         Ok(Journal {
+            name: name.to_string(),
+            num,
             file_path: file_path.into_os_string(),
             inner: InnerJournal::Working {
                 worker: batch::Worker::new(state),
@@ -57,8 +56,11 @@ impl<S> Journal<S> {
         })
     }
 
-    pub fn load_archive(name: String, file_path: ffi::OsString) -> Option<Journal<S>> {
-        let os_file = path::Path::new(&file_path);
+    pub fn load_archive(name: &str, file_path: &ffi::OsStr) -> Option<(Journal<S>, S)>
+    where
+        S: TryFrom<Cbor, Error = mkit::Error>,
+    {
+        let os_file = path::Path::new(file_path);
         let (nm, num) = files::unwrap_filename(os_file.file_name()?.to_os_string())?;
 
         if nm != name {
@@ -67,6 +69,7 @@ impl<S> Journal<S> {
 
         let mut file = err_at!(IOError, fs::OpenOptions::new().read(true).open(os_file)).ok()?;
 
+        let mut state = vec![];
         let mut index = vec![];
         let mut fpos = 0_usize;
         let len = file.metadata().ok()?.len();
@@ -80,15 +83,55 @@ impl<S> Journal<S> {
                 batch.to_first_seqno(),
                 batch.to_last_seqno(),
             ));
+            state = batch.to_state();
             fpos += n
         }
 
+        if index.len() == 0 {
+            return None;
+        }
+
+        let state: S = match Cbor::decode(&mut state.as_slice()) {
+            Ok((state, _)) => match S::try_from(state) {
+                Ok(state) => Some(state),
+                Err(err) => {
+                    error!(target: "wral", "corrupted state-cbor {:?} {}", file_path, err);
+                    None
+                }
+            },
+            Err(err) => {
+                error!(target: "wral", "corrupted state {:?} {}", file_path, err);
+                None
+            }
+        }?;
+
         debug!(target: "wral", "load journal {:?}, loaded {} batches", file_path, index.len());
 
-        Some(Journal {
-            file_path,
+        let journal = Journal {
+            name: name.to_string(),
+            num,
+            file_path: file_path.to_os_string(),
             inner: InnerJournal::Archive { index },
-        })
+        };
+
+        Some((journal, state))
+    }
+
+    pub fn load_cold(name: &str, file_path: &ffi::OsStr) -> Option<Journal<S>> {
+        let os_file = path::Path::new(file_path);
+        let (nm, num) = files::unwrap_filename(os_file.file_name()?.to_os_string())?;
+
+        if nm != name {
+            return None;
+        }
+
+        let journal = Journal {
+            name: name.to_string(),
+            num,
+            file_path: file_path.to_os_string(),
+            inner: InnerJournal::Cold,
+        };
+        Some(journal)
     }
 
     pub fn into_cold(mut self) -> Self {
@@ -102,12 +145,6 @@ impl<S> Journal<S> {
         self
     }
 
-    pub fn purge(self) -> Result<()> {
-        debug!(target: "wral", "purging {:?} ...", self.file_path);
-        err_at!(IOError, fs::remove_file(&self.file_path))?;
-        Ok(())
-    }
-
     pub fn into_archive(mut self) -> (Self, Vec<entry::Entry>, S) {
         let (inner, entries, state) = match self.inner {
             InnerJournal::Working { worker, .. } => {
@@ -119,15 +156,46 @@ impl<S> Journal<S> {
         self.inner = inner;
         (self, entries, state)
     }
+
+    pub fn purge(self) -> Result<()> {
+        debug!(target: "wral", "purging {:?} ...", self.file_path);
+        err_at!(IOError, fs::remove_file(&self.file_path))?;
+        Ok(())
+    }
 }
 
 impl<S> Journal<S> {
+    fn add_entry(&mut self, entry: entry::Entry) -> Result<()>
+    where
+        S: state::State,
+    {
+        match &mut self.inner {
+            InnerJournal::Working { worker, .. } => worker.add_entry(entry),
+            InnerJournal::Archive { .. } => unreachable!(),
+            InnerJournal::Cold => unreachable!(),
+        }
+    }
+}
+
+impl<S> Journal<S> {
+    pub fn to_journal_number(&self) -> usize {
+        self.num
+    }
+
+    pub fn len_batches(&self) -> usize {
+        match &self.inner {
+            InnerJournal::Working { worker, .. } => worker.len_batches(),
+            InnerJournal::Archive { index } => index.len(),
+            InnerJournal::Cold { .. } => unreachable!(),
+        }
+    }
+
     pub fn to_last_seqno(&self) -> Option<u64> {
         match &self.inner {
             InnerJournal::Working { worker, .. } => worker.to_last_seqno(),
             InnerJournal::Archive { index } if index.len() == 0 => None,
             InnerJournal::Archive { index } => index.last().map(batch::Index::to_last_seqno),
-            _ => unreachable!(),
+            _ => None,
         }
     }
 }
