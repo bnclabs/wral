@@ -3,7 +3,7 @@ use mkit::{self, Cborize};
 use std::{
     cmp,
     fmt::{self, Display},
-    fs, ops, result,
+    fs, result,
 };
 
 use crate::{entry, state, util, Error, Result};
@@ -34,13 +34,6 @@ impl<S> Worker<S> {
 }
 
 impl<S> Worker<S> {
-    pub fn to_first_seqno(&self) -> Option<u64> {
-        match self.entries.len() {
-            0 => self.index.first().map(|index| index.first_seqno),
-            _ => self.entries.first().map(entry::Entry::to_seqno),
-        }
-    }
-
     pub fn to_last_seqno(&self) -> Option<u64> {
         match self.entries.len() {
             0 => self.index.last().map(|index| index.last_seqno),
@@ -151,18 +144,8 @@ impl Batch {
     const ID: u64 = 0x0;
 
     #[inline]
-    pub fn to_seqno_range(&self) -> ops::RangeInclusive<u64> {
-        ops::RangeInclusive::new(self.first_seqno, self.last_seqno)
-    }
-
-    #[inline]
     pub fn to_state(&self) -> Vec<u8> {
         self.state.to_vec()
-    }
-
-    #[inline]
-    pub fn as_state(&self) -> &[u8] {
-        &self.state
     }
 
     #[inline]
@@ -173,16 +156,6 @@ impl Batch {
     #[inline]
     pub fn to_last_seqno(&self) -> u64 {
         self.last_seqno
-    }
-
-    #[inline]
-    pub fn to_entries(&self) -> Vec<entry::Entry> {
-        self.entries.to_vec()
-    }
-
-    #[inline]
-    pub fn as_entries(&self) -> &[entry::Entry] {
-        &self.entries
     }
 }
 

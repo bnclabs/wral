@@ -4,7 +4,12 @@ use mkit::{
     cbor::{Cbor, FromCbor},
 };
 
-use std::{convert::TryFrom, ffi, fs, path};
+use std::{
+    convert::TryFrom,
+    ffi,
+    fmt::{self, Display},
+    fs, path, result,
+};
 
 use crate::{batch, entry, files, state, Error, Result};
 
@@ -13,6 +18,12 @@ pub(crate) struct Journal<S> {
     num: usize,
     file_path: ffi::OsString, // dir/{name}-journal-{num}.dat
     inner: InnerJournal<S>,
+}
+
+impl<S> Display for Journal<S> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> result::Result<(), fmt::Error> {
+        write!(f, "journal-{}-{}", self.name, self.num)
+    }
 }
 
 enum InnerJournal<S> {
@@ -141,17 +152,6 @@ impl<S> Journal<S> {
         Some(journal)
     }
 
-    pub fn into_cold(mut self) -> Self {
-        self.inner = match self.inner {
-            InnerJournal::Archive { .. } => InnerJournal::Cold,
-            _ => unreachable!(),
-        };
-
-        debug!(target: "wral", "moving journal {:?} to cold state", self.file_path);
-
-        self
-    }
-
     pub fn into_archive(mut self) -> (Self, Vec<entry::Entry>, S)
     where
         S: Clone,
@@ -247,71 +247,6 @@ impl<S> Journal<S> {
         }
     }
 }
-
-//impl<S, T> Journal<S, T>
-//where
-//    S: Default + Serialize,
-//    T: Serialize,
-//{
-//    // periodically flush journal entries from memory to disk.
-//    fn flush1(
-//        &mut self,
-//        journal_limit: usize,
-//        fsync: bool,
-//    ) -> Result<Option<(Vec<u8>, Batch<S, T>)>> {
-//        let (file_path, fd, batches, active, rotate) = match &mut self.inner {
-//            InnerJournal::Active {
-//                file_path,
-//                fd,
-//                batches,
-//                active,
-//            } => {
-//                let limit: u64 = convert_at!(journal_limit)?;
-//                let rotate = err_at!(IOError, fd.metadata())?.len() > limit;
-//                Ok((file_path, fd, batches, active, rotate))
-//            }
-//            _ => err_at!(Fatal, msg: format!("unreachable")),
-//        }?;
-//
-//        match rotate {
-//            true if active.len()? > 0 => Ok(Some(active.to_refer(0)?)),
-//            false if active.len()? > 0 => {
-//                let (buffer, batch) = {
-//                    let fpos = err_at!(IOError, fd.metadata())?.len();
-//                    active.to_refer(fpos)?
-//                };
-//                batches.push(batch);
-//                write_file!(fd, &buffer, file_path.clone(), "wal-flush1")?;
-//                if fsync {
-//                    err_at!(IOError, fd.sync_all())?;
-//                }
-//                *active = Batch::default_active();
-//                Ok(None)
-//            }
-//            _ => Ok(None),
-//        }
-//    }
-//
-//    fn flush2(&mut self, buffer: &[u8], batch: Batch<S, T>, fsync: bool) -> Result<()> {
-//        let (file_path, fd, batches, active) = match &mut self.inner {
-//            InnerJournal::Active {
-//                file_path,
-//                fd,
-//                batches,
-//                active,
-//            } => Ok((file_path, fd, batches, active)),
-//            _ => err_at!(Fatal, msg: format!("unreachable")),
-//        }?;
-//
-//        write_file!(fd, &buffer, file_path.clone(), "wal-flush2")?;
-//        if fsync {
-//            err_at!(IOError, fd.sync_all())?;
-//        }
-//        batches.push(batch);
-//        *active = Batch::default_active();
-//
-//        Ok(())
-//    }
 
 //#[cfg(test)]
 //#[path = "dlog_journal_test.rs"]

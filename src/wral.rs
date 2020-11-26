@@ -35,7 +35,7 @@ pub struct Config {
 }
 
 impl Config {
-    fn new(name: &str, dir: &ffi::OsStr) -> Config {
+    pub fn new(name: &str, dir: &ffi::OsStr) -> Config {
         Config {
             name: name.to_string(),
             dir: dir.to_os_string(),
@@ -46,17 +46,17 @@ impl Config {
         }
     }
 
-    fn set_journal_limit(&mut self, journal_limit: usize) -> &mut Self {
+    pub fn set_journal_limit(&mut self, journal_limit: usize) -> &mut Self {
         self.journal_limit = journal_limit;
         self
     }
 
-    fn set_batch_size(&mut self, batch_size: usize) -> &mut Self {
+    pub fn set_batch_size(&mut self, batch_size: usize) -> &mut Self {
         self.batch_size = batch_size;
         self
     }
 
-    fn set_fsync(&mut self, fsync: bool) -> &mut Self {
+    pub fn set_fsync(&mut self, fsync: bool) -> &mut Self {
         self.fsync = fsync;
         self
     }
@@ -159,7 +159,8 @@ impl<S> Wral<S> {
             None => (0, 0, S::default()),
         };
         seqno += 1;
-        let journal = Journal::start_journal(&config.name, &config.dir, num + 1, state)?;
+        let num = num.saturating_add(1);
+        let journal = Journal::start_journal(&config.name, &config.dir, num, state)?;
 
         let n_batches: usize = journals.iter().map(|(j, _, _)| j.len_batches()).sum();
         debug!(
@@ -233,7 +234,6 @@ impl<S> Wral<S> {
         let req = writer::Req::AddEntry { op: op.to_vec() };
         let seqno = match self.tx.request(req)? {
             writer::Res::Seqno(seqno) => seqno,
-            _ => unreachable!(),
         };
         Ok(seqno)
     }

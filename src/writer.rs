@@ -6,6 +6,7 @@ use mkit::{
 
 use std::{
     borrow::BorrowMut,
+    mem,
     sync::{
         atomic::{AtomicU64, Ordering::SeqCst},
         Arc, Mutex,
@@ -21,7 +22,6 @@ pub enum Req {
 
 pub enum Res {
     Seqno(u64),
-    None,
 }
 
 pub struct Writer<S> {
@@ -100,7 +100,7 @@ where
 {
     type Output = Result<u64>;
 
-    extern "rust-call" fn call_once(mut self, _args: ()) -> Self::Output {
+    extern "rust-call" fn call_once(self, _args: ()) -> Self::Output {
         let mut batch_size = self.config.batch_size;
         let mut last_flush = time::Instant::now();
         for req in self.rx {
@@ -113,7 +113,7 @@ where
                     batch_size = batch_size.saturating_sub(1);
 
                     if batch_size == 0 || last_flush.elapsed() > self.config.batch_period {
-                        w.journal.flush();
+                        w.journal.flush()?;
                         // reload the flush thresholds
                         batch_size = self.config.batch_size;
                         last_flush = time::Instant::now();
@@ -125,7 +125,7 @@ where
                     }
 
                     if w.journal.file_size()? > self.config.journal_limit {
-                        Self::rotate(w.borrow_mut());
+                        Self::rotate(w.borrow_mut())?;
                     }
                 }
             }
@@ -135,8 +135,24 @@ where
     }
 }
 
-impl<S> MainLoop<S> {
-    fn rotate(_w: &mut Writer<S>) -> Result<()> {
-        todo!()
+impl<S> MainLoop<S>
+where
+    S: Clone,
+{
+    fn rotate(w: &mut Writer<S>) -> Result<()> {
+        // new journal
+        let journal = {
+            let num = w.journal.to_journal_number().saturating_add(1);
+            let state = w.journal.to_state();
+            Journal::start_journal(&w.config.name, &w.config.dir, num, state)?
+        };
+        // replace with current journal
+        let journal = mem::replace(&mut w.journal, journal);
+        let (journal, entries, _) = journal.into_archive();
+        if entries.len() != 0 {
+            err_at!(Fatal, msg: "unflushed entries {}", entries.len())?
+        }
+        w.journals.push(journal);
+        Ok(())
     }
 }

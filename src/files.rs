@@ -36,8 +36,3 @@ pub fn unwrap_filename(file: ffi::OsString) -> Option<(String, usize)> {
         _ => None,
     }
 }
-
-pub fn next_filename(file: ffi::OsString) -> ffi::OsString {
-    let (name, num): (String, usize) = unwrap_filename(file.clone()).unwrap();
-    make_filename(name, num.saturating_add(1))
-}
