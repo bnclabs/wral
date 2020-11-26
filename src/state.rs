@@ -5,7 +5,7 @@ use mkit::{
 
 use crate::{entry::Entry, Result};
 
-pub trait State: Clone + IntoCbor + FromCbor {
+pub trait State: 'static + Clone + Sync + Send + IntoCbor + FromCbor {
     fn on_add_entry(&mut self, new_entry: &Entry) -> Result<()>;
 }
 

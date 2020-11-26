@@ -4,15 +4,11 @@
 //! and are numbered from ZERO.
 
 use log::debug;
-use mkit::{
-    self,
-    cbor::{FromCbor, IntoCbor},
-    thread,
-};
+use mkit::{self, thread};
 
 use std::{
     ffi, fs, path,
-    sync::{Arc, Mutex},
+    sync::{Arc, RwLock},
     time,
 };
 
@@ -23,6 +19,8 @@ const JOURNAL_LIMIT: usize = 1 * 1024 * 1024 * 1024; // 1GB.
 const BATCH_SIZE: usize = 1 * 1024 * 1024; // 1MB.
 
 const BATCH_PERIOD: time::Duration = time::Duration::from_micros(10 * 1000); // 10ms
+
+pub const SYNC_BUFFER: usize = 1024;
 
 #[derive(Clone)]
 pub struct Config {
@@ -68,7 +66,7 @@ pub struct Wral<S> {
 
     tx: thread::Tx<writer::Req, writer::Res>,
     t: Option<Arc<mkit::Thread<writer::Req, writer::Res, Result<u64>>>>,
-    w: Option<Arc<Mutex<writer::Writer<S>>>>,
+    w: Option<Arc<RwLock<writer::Writer<S>>>>,
 }
 
 impl<S> Clone for Wral<S> {
@@ -88,7 +86,7 @@ impl<S> Wral<S> {
     /// older journals matching the `name` shall be purged.
     pub fn create(config: Config, state: S) -> Result<Wral<S>>
     where
-        S: 'static + Send + Clone + IntoCbor + FromCbor + state::State,
+        S: state::State,
     {
         // try creating the directory, if it does not exist.
         fs::create_dir_all(&config.dir).ok();
@@ -135,7 +133,7 @@ impl<S> Wral<S> {
     /// last journal.
     pub fn load(config: Config) -> Result<Wral<S>>
     where
-        S: 'static + Send + Default + Clone + IntoCbor + FromCbor + state::State,
+        S: Default + state::State,
     {
         let mut journals: Vec<(Journal<S>, u64, S)> = vec![];
         for item in err_at!(IOError, fs::read_dir(&config.dir))? {
@@ -240,9 +238,12 @@ impl<S> Wral<S> {
 }
 
 impl<S> Wral<S> {
-    //fn iter_entries(&self) -> impl Iterator<Item = entry::Entry> {
-    //    todo!()
-    //}
+    fn iter_entries(&self) -> impl Iterator<Item = entry::Entry> {
+        let _lock = {
+            let m = self.w.as_ref().unwrap();
+            m.read()
+        };
+    }
 }
 
 //#[cfg(test)]

@@ -9,12 +9,12 @@ use std::{
     mem,
     sync::{
         atomic::{AtomicU64, Ordering::SeqCst},
-        Arc, Mutex,
+        Arc, RwLock,
     },
     time,
 };
 
-use crate::{entry, journal::Journal, state, wral::Config, Error, Result};
+use crate::{entry, journal::Journal, state, wral, wral::Config, Error, Result};
 
 pub enum Req {
     AddEntry { op: Vec<u8> },
@@ -37,26 +37,31 @@ impl<S> Writer<S> {
         journals: Vec<Journal<S>>,
         journal: Journal<S>,
         seqno: u64,
-    ) -> (Arc<Mutex<Writer<S>>>, thread::Thread<Req, Res, Result<u64>>)
+    ) -> (
+        Arc<RwLock<Writer<S>>>,
+        thread::Thread<Req, Res, Result<u64>>,
+    )
     where
-        S: 'static + Send + Clone + IntoCbor + FromCbor + state::State,
+        S: state::State,
     {
         let seqno = Arc::new(AtomicU64::new(seqno));
-        let w = Arc::new(Mutex::new(Writer {
+        let w = Arc::new(RwLock::new(Writer {
             config: config.clone(),
             seqno: Arc::clone(&seqno),
             journals,
             journal,
         }));
         let name = format!("wral-writer-{}", config.name);
-        // TODO: avoid magic number
         let thread_w = Arc::clone(&w);
-        let t = thread::Thread::new_sync(&name, 1000, move |rx: thread::Rx<Req, Res>| MainLoop {
-            config,
-            seqno,
-            w: thread_w,
-            rx,
-        });
+        let t =
+            thread::Thread::new_sync(&name, wral::SYNC_BUFFER, move |rx: thread::Rx<Req, Res>| {
+                MainLoop {
+                    config,
+                    seqno,
+                    w: thread_w,
+                    rx,
+                }
+            });
         (w, t)
     }
 
@@ -90,7 +95,7 @@ impl<S> Writer<S> {
 struct MainLoop<S> {
     config: Config,
     seqno: Arc<AtomicU64>,
-    w: Arc<Mutex<Writer<S>>>,
+    w: Arc<RwLock<Writer<S>>>,
     rx: thread::Rx<Req, Res>,
 }
 
@@ -106,7 +111,7 @@ where
         for req in self.rx {
             match req {
                 (Req::AddEntry { op }, tx) => {
-                    let mut w = err_at!(Fatal, self.w.lock())?;
+                    let mut w = err_at!(Fatal, self.w.write())?;
                     let seqno = self.seqno.fetch_add(1, SeqCst);
                     w.journal.add_entry(entry::Entry::new(seqno, op))?;
 
