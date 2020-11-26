@@ -1,7 +1,10 @@
 use log::{debug, error};
-use mkit::{self, cbor::Cbor};
+use mkit::{
+    self,
+    cbor::{Cbor, FromCbor},
+};
 
-use std::{convert::TryFrom, convert::TryInto, ffi, fs, path};
+use std::{convert::TryFrom, ffi, fs, path};
 
 use crate::{batch, entry, files, state, Error, Result};
 
@@ -23,6 +26,7 @@ enum InnerJournal<S> {
     // the metadata for each batch shall be stored.
     Archive {
         index: Vec<batch::Index>,
+        state: S,
     },
     // Cold journals are colder than archives, that is, they are not
     // required by the application, may be as frozen-backup.
@@ -58,7 +62,7 @@ impl<S> Journal<S> {
 
     pub fn load_archive(name: &str, file_path: &ffi::OsStr) -> Option<(Journal<S>, S)>
     where
-        S: TryFrom<Cbor, Error = mkit::Error>,
+        S: Clone + FromCbor,
     {
         let os_file = path::Path::new(file_path);
         let (nm, num) = files::unwrap_filename(os_file.file_name()?.to_os_string())?;
@@ -76,7 +80,7 @@ impl<S> Journal<S> {
 
         while u64::try_from(fpos).ok()? < len {
             let (val, n) = Cbor::decode(&mut file).ok()?;
-            let batch: batch::Batch = val.try_into().ok()?;
+            let batch = batch::Batch::from_cbor(val).ok()?;
             index.push(batch::Index::new(
                 u64::try_from(fpos).ok()?,
                 n,
@@ -92,7 +96,7 @@ impl<S> Journal<S> {
         }
 
         let state: S = match Cbor::decode(&mut state.as_slice()) {
-            Ok((state, _)) => match S::try_from(state) {
+            Ok((state, _)) => match S::from_cbor(state) {
                 Ok(state) => Some(state),
                 Err(err) => {
                     error!(target: "wral", "corrupted state-cbor {:?} {}", file_path, err);
@@ -111,7 +115,10 @@ impl<S> Journal<S> {
             name: name.to_string(),
             num,
             file_path: file_path.to_os_string(),
-            inner: InnerJournal::Archive { index },
+            inner: InnerJournal::Archive {
+                index,
+                state: state.clone(),
+            },
         };
 
         Some((journal, state))
@@ -145,11 +152,18 @@ impl<S> Journal<S> {
         self
     }
 
-    pub fn into_archive(mut self) -> (Self, Vec<entry::Entry>, S) {
+    pub fn into_archive(mut self) -> (Self, Vec<entry::Entry>, S)
+    where
+        S: Clone,
+    {
         let (inner, entries, state) = match self.inner {
             InnerJournal::Working { worker, .. } => {
                 let (index, entries, state) = worker.unwrap();
-                (InnerJournal::Archive { index }, entries, state)
+                let inner = InnerJournal::Archive {
+                    index,
+                    state: state.clone(),
+                };
+                (inner, entries, state)
             }
             _ => unreachable!(),
         };
@@ -165,7 +179,7 @@ impl<S> Journal<S> {
 }
 
 impl<S> Journal<S> {
-    fn add_entry(&mut self, entry: entry::Entry) -> Result<()>
+    pub fn add_entry(&mut self, entry: entry::Entry) -> Result<()>
     where
         S: state::State,
     {
@@ -173,6 +187,17 @@ impl<S> Journal<S> {
             InnerJournal::Working { worker, .. } => worker.add_entry(entry),
             InnerJournal::Archive { .. } => unreachable!(),
             InnerJournal::Cold => unreachable!(),
+        }
+    }
+
+    pub fn flush(&mut self) -> Result<()>
+    where
+        S: state::State,
+    {
+        match &mut self.inner {
+            InnerJournal::Working { worker, file } => worker.flush(file),
+            InnerJournal::Archive { .. } => unreachable!(),
+            InnerJournal::Cold { .. } => unreachable!(),
         }
     }
 }
@@ -185,7 +210,7 @@ impl<S> Journal<S> {
     pub fn len_batches(&self) -> usize {
         match &self.inner {
             InnerJournal::Working { worker, .. } => worker.len_batches(),
-            InnerJournal::Archive { index } => index.len(),
+            InnerJournal::Archive { index, .. } => index.len(),
             InnerJournal::Cold { .. } => unreachable!(),
         }
     }
@@ -193,9 +218,32 @@ impl<S> Journal<S> {
     pub fn to_last_seqno(&self) -> Option<u64> {
         match &self.inner {
             InnerJournal::Working { worker, .. } => worker.to_last_seqno(),
-            InnerJournal::Archive { index } if index.len() == 0 => None,
-            InnerJournal::Archive { index } => index.last().map(batch::Index::to_last_seqno),
+            InnerJournal::Archive { index, .. } if index.len() == 0 => None,
+            InnerJournal::Archive { index, .. } => index.last().map(batch::Index::to_last_seqno),
             _ => None,
+        }
+    }
+
+    pub fn file_size(&self) -> Result<usize> {
+        let n = match &self.inner {
+            InnerJournal::Working { file, .. } => {
+                let m = err_at!(IOError, file.metadata())?;
+                err_at!(FailConvert, usize::try_from(m.len()))?
+            }
+            InnerJournal::Archive { .. } => unreachable!(),
+            InnerJournal::Cold => unreachable!(),
+        };
+        Ok(n)
+    }
+
+    pub fn to_state(&self) -> S
+    where
+        S: Clone,
+    {
+        match &self.inner {
+            InnerJournal::Working { worker, .. } => worker.to_state(),
+            InnerJournal::Archive { state, .. } => state.clone(),
+            InnerJournal::Cold => unreachable!(),
         }
     }
 }

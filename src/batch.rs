@@ -1,8 +1,7 @@
-use mkit::{self, cbor::Cbor, Cborize};
+use mkit::{self, Cborize};
 
 use std::{
     cmp,
-    convert::TryInto,
     fmt::{self, Display},
     fs, ops, result,
 };
@@ -55,7 +54,7 @@ impl<S> Worker<S> {
 
     pub fn flush(&mut self, file: &mut fs::File) -> Result<()>
     where
-        S: Clone + TryInto<Cbor, Error = mkit::Error>,
+        S: state::State,
     {
         let fpos = err_at!(IOError, file.metadata())?.len();
         let batch = match self.entries.len() {
@@ -80,6 +79,13 @@ impl<S> Worker<S> {
             .push(Index::new(fpos, length, first_seqno, last_seqno));
 
         Ok(())
+    }
+
+    pub fn to_state(&self) -> S
+    where
+        S: Clone,
+    {
+        self.state.clone()
     }
 
     pub fn unwrap(self) -> (Vec<Index>, Vec<entry::Entry>, S) {
@@ -142,7 +148,7 @@ impl From<Vec<entry::Entry>> for Batch {
 }
 
 impl Batch {
-    const ID: u64 = 0x1;
+    const ID: u64 = 0x0;
 
     #[inline]
     pub fn to_seqno_range(&self) -> ops::RangeInclusive<u64> {
@@ -181,7 +187,7 @@ impl Batch {
 }
 
 /// Index of batches on disk.
-#[derive(Cborize, Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct Index {
     // offset in file, where the batch starts.
     fpos: u64,
@@ -194,8 +200,6 @@ pub struct Index {
 }
 
 impl Index {
-    const ID: u64 = 0x1;
-
     pub fn new(fpos: u64, length: usize, first_seqno: u64, last_seqno: u64) -> Index {
         Index {
             fpos,

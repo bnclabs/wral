@@ -1,15 +1,15 @@
-use mkit::{self, cbor::Cbor};
+use mkit::cbor::IntoCbor;
 
-use std::{convert::TryInto, fs, io::Write};
+use std::{fs, io::Write};
 
 use crate::{Error, Result};
 
 pub fn encode_cbor<T>(val: T) -> Result<Vec<u8>>
 where
-    T: TryInto<Cbor, Error = mkit::Error>,
+    T: IntoCbor,
 {
     let mut data: Vec<u8> = vec![];
-    let n = val.try_into()?.encode(&mut data)?;
+    let n = val.into_cbor()?.encode(&mut data)?;
     if n != data.len() {
         err_at!(Fatal, msg: "cbor encoding len mistmatch {} {}", n, data.len())
     } else {
