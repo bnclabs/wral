@@ -8,12 +8,12 @@ use std::{
     convert::TryFrom,
     ffi,
     fmt::{self, Display},
-    fs, path, result,
+    fs, path, result, vec,
 };
 
 use crate::{batch, entry, files, state, Error, Result};
 
-pub(crate) struct Journal<S> {
+pub struct Journal<S> {
     name: String,
     num: usize,
     file_path: ffi::OsString, // dir/{name}-journal-{num}.dat
@@ -244,6 +244,61 @@ impl<S> Journal<S> {
             InnerJournal::Working { worker, .. } => worker.to_state(),
             InnerJournal::Archive { state, .. } => state.clone(),
             InnerJournal::Cold => unreachable!(),
+        }
+    }
+}
+
+pub struct RdJournal {
+    batch: vec::IntoIter<entry::Entry>,
+    index: vec::IntoIter<batch::Index>,
+    entries: vec::IntoIter<entry::Entry>,
+    file: fs::File,
+}
+
+impl RdJournal {
+    pub fn from_journal<S>(journal: &Journal<S>) -> Result<RdJournal> {
+        let (index, entries) = match &journal.inner {
+            InnerJournal::Working { worker, .. } => (worker.to_index(), worker.to_entries()),
+            InnerJournal::Archive { index, .. } => (index.to_vec(), vec![]),
+            InnerJournal::Cold => unreachable!(),
+        };
+        let batch: vec::IntoIter<entry::Entry> = vec![].into_iter();
+        let index = index.into_iter();
+        let entries = entries.into_iter();
+
+        let file = {
+            let mut opts = fs::OpenOptions::new();
+            err_at!(IOError, opts.read(true).open(&journal.file_path))?
+        };
+
+        Ok(RdJournal {
+            batch,
+            index,
+            entries,
+            file,
+        })
+    }
+}
+
+impl Iterator for RdJournal {
+    type Item = Result<entry::Entry>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.batch.next() {
+            Some(entry) => Some(Ok(entry)),
+            None => match self.index.next() {
+                Some(index) => match batch::Batch::from_index(index, &mut self.file) {
+                    Ok(batch) => {
+                        self.batch = batch.into_iter();
+                        self.next()
+                    }
+                    Err(err) => Some(Err(err)),
+                },
+                None => match self.entries.next() {
+                    Some(entry) => Some(Ok(entry)),
+                    None => None,
+                },
+            },
         }
     }
 }

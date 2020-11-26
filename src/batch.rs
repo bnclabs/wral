@@ -1,9 +1,15 @@
-use mkit::{self, Cborize};
+use mkit::{
+    self,
+    cbor::{Cbor, FromCbor},
+    Cborize,
+};
 
 use std::{
     cmp,
     fmt::{self, Display},
-    fs, result,
+    fs,
+    io::{self, Read, Seek},
+    result, vec,
 };
 
 use crate::{entry, state, util, Error, Result};
@@ -30,19 +36,6 @@ impl<S> Worker<S> {
         self.state.on_add_entry(&entry)?;
         self.entries.push(entry);
         Ok(())
-    }
-}
-
-impl<S> Worker<S> {
-    pub fn to_last_seqno(&self) -> Option<u64> {
-        match self.entries.len() {
-            0 => self.index.last().map(|index| index.last_seqno),
-            _ => self.entries.last().map(entry::Entry::to_seqno),
-        }
-    }
-
-    pub fn len_batches(&self) -> usize {
-        self.index.len()
     }
 
     pub fn flush(&mut self, file: &mut fs::File) -> Result<()>
@@ -72,6 +65,27 @@ impl<S> Worker<S> {
             .push(Index::new(fpos, length, first_seqno, last_seqno));
 
         Ok(())
+    }
+}
+
+impl<S> Worker<S> {
+    pub fn to_last_seqno(&self) -> Option<u64> {
+        match self.entries.len() {
+            0 => self.index.last().map(|index| index.last_seqno),
+            _ => self.entries.last().map(entry::Entry::to_seqno),
+        }
+    }
+
+    pub fn to_index(&self) -> Vec<Index> {
+        self.index.clone()
+    }
+
+    pub fn to_entries(&self) -> Vec<entry::Entry> {
+        self.entries.clone()
+    }
+
+    pub fn len_batches(&self) -> usize {
+        self.index.len()
     }
 
     pub fn to_state(&self) -> S
@@ -129,19 +143,16 @@ impl Ord for Batch {
     }
 }
 
-impl From<Vec<entry::Entry>> for Batch {
-    fn from(entries: Vec<entry::Entry>) -> Batch {
-        Batch {
-            first_seqno: entries.first().map(entry::Entry::to_seqno).unwrap_or(0),
-            last_seqno: entries.last().map(entry::Entry::to_seqno).unwrap_or(0),
-            state: Vec::default(),
-            entries,
-        }
-    }
-}
-
 impl Batch {
     const ID: u64 = 0x0;
+
+    pub fn from_index(index: Index, file: &mut fs::File) -> Result<Batch> {
+        err_at!(IOError, file.seek(io::SeekFrom::Start(index.fpos)))?;
+        let mut buf = Vec::with_capacity(index.length);
+        err_at!(IOError, file.read_exact(&mut buf))?;
+        let (value, _) = Cbor::decode(&mut buf.as_slice())?;
+        Ok(Batch::from_cbor(value)?)
+    }
 
     #[inline]
     pub fn to_state(&self) -> Vec<u8> {
@@ -156,6 +167,10 @@ impl Batch {
     #[inline]
     pub fn to_last_seqno(&self) -> u64 {
         self.last_seqno
+    }
+
+    pub fn into_iter(self) -> vec::IntoIter<entry::Entry> {
+        self.entries.into_iter()
     }
 }
 

@@ -27,8 +27,8 @@ pub enum Res {
 pub struct Writer<S> {
     config: Config,
     seqno: Arc<AtomicU64>,
-    journals: Vec<Journal<S>>,
-    journal: Journal<S>,
+    pub journals: Vec<Journal<S>>,
+    pub journal: Journal<S>,
 }
 
 impl<S> Writer<S> {

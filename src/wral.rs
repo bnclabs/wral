@@ -7,12 +7,12 @@ use log::debug;
 use mkit::{self, thread};
 
 use std::{
-    ffi, fs, path,
+    ffi, fs, ops, path,
     sync::{Arc, RwLock},
-    time,
+    time, vec,
 };
 
-use crate::{journal::Journal, state, writer, Error, Result};
+use crate::{entry, journal, journal::Journal, state, writer, Error, Result};
 
 const JOURNAL_LIMIT: usize = 1 * 1024 * 1024 * 1024; // 1GB.
 
@@ -238,11 +238,56 @@ impl<S> Wral<S> {
 }
 
 impl<S> Wral<S> {
-    fn iter_entries(&self) -> impl Iterator<Item = entry::Entry> {
-        let _lock = {
+    pub fn iter(
+        &self,
+        range: ops::Range<u64>,
+    ) -> Result<impl Iterator<Item = Result<entry::Entry>>> {
+        let rd = {
             let m = self.w.as_ref().unwrap();
-            m.read()
+            err_at!(Fatal, m.read())?
         };
+        let mut journals = vec![];
+        for j in rd.journals.iter() {
+            journals.push(journal::RdJournal::from_journal(j)?);
+        }
+        journals.push(journal::RdJournal::from_journal(&rd.journal)?);
+
+        Ok(Iter {
+            journal: None,
+            journals: journals.into_iter(),
+        })
+    }
+}
+
+struct Iter {
+    journal: Option<journal::RdJournal>,
+    journals: vec::IntoIter<journal::RdJournal>,
+}
+
+impl Iterator for Iter {
+    type Item = Result<entry::Entry>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let mut journal = match self.journal.take() {
+            Some(journal) => journal,
+            None => self.journals.next()?,
+        };
+        loop {
+            match journal.next() {
+                Some(item) => {
+                    self.journal = Some(journal);
+                    return Some(item);
+                }
+                None => match self.journals.next() {
+                    Some(j) => {
+                        journal = j;
+                    }
+                    None => {
+                        return None;
+                    }
+                },
+            }
+        }
     }
 }
 
