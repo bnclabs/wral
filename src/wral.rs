@@ -248,9 +248,9 @@ impl<S> Wral<S> {
         };
         let mut journals = vec![];
         for j in rd.journals.iter() {
-            journals.push(journal::RdJournal::from_journal(j)?);
+            journals.push(journal::RdJournal::from_journal(j, range.clone())?);
         }
-        journals.push(journal::RdJournal::from_journal(&rd.journal)?);
+        journals.push(journal::RdJournal::from_journal(&rd.journal, range)?);
 
         Ok(Iter {
             journal: None,

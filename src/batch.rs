@@ -9,7 +9,7 @@ use std::{
     fmt::{self, Display},
     fs,
     io::{self, Read, Seek},
-    result, vec,
+    ops, result, vec,
 };
 
 use crate::{entry, state, util, Error, Result};
@@ -169,8 +169,13 @@ impl Batch {
         self.last_seqno
     }
 
-    pub fn into_iter(self) -> vec::IntoIter<entry::Entry> {
-        self.entries.into_iter()
+    pub fn into_iter(self, range: ops::Range<u64>) -> vec::IntoIter<entry::Entry> {
+        self.entries
+            .into_iter()
+            .skip_while(|e| e.to_seqno() < range.start)
+            .take_while(|e| e.to_seqno() < range.end)
+            .collect::<Vec<entry::Entry>>()
+            .into_iter()
     }
 }
 
@@ -195,6 +200,11 @@ impl Index {
             first_seqno,
             last_seqno,
         }
+    }
+
+    #[inline]
+    pub fn to_first_seqno(&self) -> u64 {
+        self.first_seqno
     }
 
     #[inline]

@@ -8,7 +8,7 @@ use std::{
     convert::TryFrom,
     ffi,
     fmt::{self, Display},
-    fs, path, result, vec,
+    fs, ops, path, result, vec,
 };
 
 use crate::{batch, entry, files, state, Error, Result};
@@ -249,6 +249,7 @@ impl<S> Journal<S> {
 }
 
 pub struct RdJournal {
+    range: ops::Range<u64>,
     batch: vec::IntoIter<entry::Entry>,
     index: vec::IntoIter<batch::Index>,
     entries: vec::IntoIter<entry::Entry>,
@@ -256,15 +257,25 @@ pub struct RdJournal {
 }
 
 impl RdJournal {
-    pub fn from_journal<S>(journal: &Journal<S>) -> Result<RdJournal> {
+    pub fn from_journal<S>(journal: &Journal<S>, range: ops::Range<u64>) -> Result<RdJournal> {
         let (index, entries) = match &journal.inner {
             InnerJournal::Working { worker, .. } => (worker.to_index(), worker.to_entries()),
             InnerJournal::Archive { index, .. } => (index.to_vec(), vec![]),
             InnerJournal::Cold => unreachable!(),
         };
         let batch: vec::IntoIter<entry::Entry> = vec![].into_iter();
-        let index = index.into_iter();
-        let entries = entries.into_iter();
+        let index = index
+            .into_iter()
+            .skip_while(|i| i.to_last_seqno() < range.start)
+            .take_while(|i| i.to_first_seqno() < range.end)
+            .collect::<Vec<batch::Index>>()
+            .into_iter();
+        let entries = entries
+            .into_iter()
+            .skip_while(|e| e.to_seqno() < range.start)
+            .take_while(|e| e.to_seqno() < range.end)
+            .collect::<Vec<entry::Entry>>()
+            .into_iter();
 
         let file = {
             let mut opts = fs::OpenOptions::new();
@@ -272,6 +283,7 @@ impl RdJournal {
         };
 
         Ok(RdJournal {
+            range,
             batch,
             index,
             entries,
@@ -289,7 +301,7 @@ impl Iterator for RdJournal {
             None => match self.index.next() {
                 Some(index) => match batch::Batch::from_index(index, &mut self.file) {
                     Ok(batch) => {
-                        self.batch = batch.into_iter();
+                        self.batch = batch.into_iter(self.range.clone());
                         self.next()
                     }
                     Err(err) => Some(Err(err)),
