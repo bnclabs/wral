@@ -155,7 +155,7 @@ impl Batch {
 
     pub fn from_index(index: Index, file: &mut fs::File) -> Result<Batch> {
         err_at!(IOError, file.seek(io::SeekFrom::Start(index.fpos)))?;
-        let mut buf = Vec::with_capacity(index.length);
+        let mut buf = vec![0; index.length];
         err_at!(IOError, file.read_exact(&mut buf))?;
         let (value, _) = Cbor::decode(&mut buf.as_slice())?;
         Ok(Batch::from_cbor(value)?)
@@ -176,11 +176,10 @@ impl Batch {
         self.last_seqno
     }
 
-    pub fn into_iter(self, range: ops::Range<u64>) -> vec::IntoIter<entry::Entry> {
+    pub fn into_iter(self, range: ops::RangeInclusive<u64>) -> vec::IntoIter<entry::Entry> {
         self.entries
             .into_iter()
-            .skip_while(|e| e.to_seqno() < range.start)
-            .take_while(|e| e.to_seqno() < range.end)
+            .filter(|e| range.contains(&e.to_seqno()))
             .collect::<Vec<entry::Entry>>()
             .into_iter()
     }

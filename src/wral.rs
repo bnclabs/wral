@@ -61,6 +61,7 @@ impl Config {
 }
 
 /// Write alhead logging.
+/// TODO: make NoState as default type.
 pub struct Wral<S> {
     config: Config,
 
@@ -238,24 +239,53 @@ impl<S> Wral<S> {
 }
 
 impl<S> Wral<S> {
-    pub fn iter(
-        &self,
-        range: ops::Range<u64>,
-    ) -> Result<impl Iterator<Item = Result<entry::Entry>>> {
-        let rd = {
-            let m = self.w.as_ref().unwrap();
-            err_at!(Fatal, m.read())?
+    pub fn iter(&self) -> Result<impl Iterator<Item = Result<entry::Entry>>> {
+        self.range(..)
+    }
+
+    pub fn range<R>(&self, range: R) -> Result<impl Iterator<Item = Result<entry::Entry>>>
+    where
+        R: ops::RangeBounds<u64>,
+    {
+        let journals = match Self::range_bound_to_range_inclusive(range) {
+            Some(range) => {
+                let rd = {
+                    let m = self.w.as_ref().unwrap();
+                    err_at!(Fatal, m.read())?
+                };
+                let mut journals = vec![];
+                for jn in rd.journals.iter() {
+                    journals.push(journal::RdJournal::from_journal(jn, range.clone())?);
+                }
+                journals.push(journal::RdJournal::from_journal(&rd.journal, range)?);
+                journals
+            }
+            None => vec![],
         };
-        let mut journals = vec![];
-        for j in rd.journals.iter() {
-            journals.push(journal::RdJournal::from_journal(j, range.clone())?);
-        }
-        journals.push(journal::RdJournal::from_journal(&rd.journal, range)?);
 
         Ok(Iter {
             journal: None,
             journals: journals.into_iter(),
         })
+    }
+
+    fn range_bound_to_range_inclusive<R>(range: R) -> Option<ops::RangeInclusive<u64>>
+    where
+        R: ops::RangeBounds<u64>,
+    {
+        let start = match range.start_bound() {
+            ops::Bound::Excluded(start) if *start < u64::MAX => Some(*start + 1),
+            ops::Bound::Excluded(_) => None,
+            ops::Bound::Included(start) => Some(*start),
+            ops::Bound::Unbounded => Some(0),
+        }?;
+        let end = match range.end_bound() {
+            ops::Bound::Excluded(0) => None,
+            ops::Bound::Excluded(end) => Some(*end - 1),
+            ops::Bound::Included(end) => Some(*end),
+            ops::Bound::Unbounded => Some(u64::MAX),
+        }?;
+        Some(start..=end)
     }
 }
 

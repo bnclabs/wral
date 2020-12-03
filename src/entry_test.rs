@@ -1,5 +1,8 @@
 use arbitrary::Unstructured;
-use mkit;
+use mkit::{
+    self,
+    {cbor::FromCbor, cbor::IntoCbor},
+};
 use rand::{prelude::random, rngs::SmallRng, Rng, SeedableRng};
 
 use super::*;

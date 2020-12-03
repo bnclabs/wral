@@ -252,7 +252,7 @@ impl<S> Journal<S> {
 }
 
 pub struct RdJournal {
-    range: ops::Range<u64>,
+    range: ops::RangeInclusive<u64>,
     batch: vec::IntoIter<entry::Entry>,
     index: vec::IntoIter<batch::Index>,
     entries: vec::IntoIter<entry::Entry>,
@@ -260,7 +260,10 @@ pub struct RdJournal {
 }
 
 impl RdJournal {
-    pub fn from_journal<S>(journal: &Journal<S>, range: ops::Range<u64>) -> Result<RdJournal> {
+    pub fn from_journal<S>(
+        journal: &Journal<S>,
+        range: ops::RangeInclusive<u64>,
+    ) -> Result<RdJournal> {
         let (index, entries) = match &journal.inner {
             InnerJournal::Working { worker, .. } => (worker.to_index(), worker.to_entries()),
             InnerJournal::Archive { index, .. } => (index.to_vec(), vec![]),
@@ -269,14 +272,13 @@ impl RdJournal {
         let batch: vec::IntoIter<entry::Entry> = vec![].into_iter();
         let index = index
             .into_iter()
-            .skip_while(|i| i.to_last_seqno() < range.start)
-            .take_while(|i| i.to_first_seqno() < range.end)
+            .skip_while(|i| i.to_last_seqno() < *range.start())
+            .take_while(|i| i.to_first_seqno() <= *range.end())
             .collect::<Vec<batch::Index>>()
             .into_iter();
         let entries = entries
             .into_iter()
-            .skip_while(|e| e.to_seqno() < range.start)
-            .take_while(|e| e.to_seqno() < range.end)
+            .filter(|e| range.contains(&e.to_seqno()))
             .collect::<Vec<entry::Entry>>()
             .into_iter();
 

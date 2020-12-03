@@ -1,8 +1,5 @@
 use arbitrary::Arbitrary;
-use mkit::{
-    Cborize,
-    {cbor::FromCbor, cbor::IntoCbor},
-};
+use mkit::Cborize;
 
 use std::{
     cmp,
