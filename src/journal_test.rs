@@ -20,7 +20,7 @@ fn test_journal() {
     assert_eq!(jn.len_batches(), 0);
     assert_eq!(jn.to_state(), state::NoState);
 
-    let mut entries: Vec<entry::Entry> = (0..1000000)
+    let mut entries: Vec<entry::Entry> = (0..1000_000)
         .map(|_i| {
             let bytes = rng.gen::<[u8; 32]>();
             let mut uns = Unstructured::new(&bytes);
@@ -28,6 +28,7 @@ fn test_journal() {
         })
         .collect();
     entries.sort();
+    entries.dedup_by(|a, b| a.to_seqno() == b.to_seqno());
 
     let mut n_batches = 0;
     let mut offset = 0;

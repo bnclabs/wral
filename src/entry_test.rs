@@ -15,15 +15,18 @@ fn test_entry() {
     println!("test_entry {}", seed);
     let mut rng = SmallRng::from_seed(seed.to_le_bytes());
 
-    let mut entries = vec![];
-    for _i in 0..1000 {
-        let entry: Entry = {
+    let mut entries: Vec<Entry> = (0..1000)
+        .map(|_i| {
             let bytes = rng.gen::<[u8; 32]>();
             let mut uns = Unstructured::new(&bytes);
-            uns.arbitrary().unwrap()
-        };
-        entries.push(entry.clone());
+            uns.arbitrary::<Entry>().unwrap()
+        })
+        .collect();
+    entries.sort();
+    entries.dedup_by(|a, b| a.seqno == b.seqno);
 
+    for entry in entries.iter() {
+        let entry = entry.clone();
         assert_eq!(entry.to_seqno(), entry.seqno);
         let (seqno, op) = entry.clone().unwrap();
         assert_eq!(entry, Entry::new(seqno, op));
@@ -39,7 +42,6 @@ fn test_entry() {
         assert_eq!(entr, entry);
     }
 
-    entries.sort();
     let mut seqno = 0;
     for entry in entries.into_iter() {
         assert!(seqno < entry.seqno, "{} {}", seqno, entry.seqno);

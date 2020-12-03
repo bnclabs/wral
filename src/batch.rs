@@ -117,6 +117,7 @@ pub struct Batch {
 impl arbitrary::Arbitrary for Batch {
     fn arbitrary(u: &mut Unstructured) -> arbitrary::Result<Self> {
         let mut entries: Vec<entry::Entry> = u.arbitrary()?;
+        entries.dedup_by(|a, b| a.to_seqno() == b.to_seqno());
         entries.sort();
 
         let first_seqno: u64 = entries.first().map(|e| e.to_seqno()).unwrap_or(0);

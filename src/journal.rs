@@ -250,6 +250,7 @@ impl<S> Journal<S> {
         }
     }
 
+    #[allow(dead_code)]
     pub fn to_file_path(&self) -> ffi::OsString {
         self.file_path.clone()
     }

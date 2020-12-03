@@ -3,6 +3,7 @@
 //! Entries are added to `Wral` journal. Journals automatically rotate
 //! and are numbered from ZERO.
 
+use arbitrary::Arbitrary;
 use log::debug;
 use mkit::{self, thread};
 
@@ -14,21 +15,32 @@ use std::{
 
 use crate::{entry, journal, journal::Journal, state, writer, Error, Result};
 
-const JOURNAL_LIMIT: usize = 1 * 1024 * 1024 * 1024; // 1GB.
-
-const BATCH_SIZE: usize = 1 * 1024 * 1024; // 1MB.
-
-const BATCH_PERIOD: time::Duration = time::Duration::from_micros(10 * 1000); // 10ms
+/// Default journal file limit is set at 1GB.
+pub const JOURNAL_LIMIT: usize = 1 * 1024 * 1024 * 1024;
+/// Default batch-size for flush is set at 1MB.
+pub const BATCH_SIZE: usize = 1 * 1024 * 1024; // 1MB.
+/// Default batch-period for flush is set at 10ms.
+pub const BATCH_PERIOD: time::Duration = time::Duration::from_micros(10 * 1000); // 10ms
 
 pub const SYNC_BUFFER: usize = 1024;
 
-#[derive(Clone)]
+/// Configuration for [Wral] type.
+#[derive(Debug, Clone, Arbitrary)]
 pub struct Config {
+    /// Uniquely name Wral instances.
     pub name: String,
+    /// Directory in which wral journals are stored.
     pub dir: ffi::OsString,
+    /// Define file-size limit for a single journal file, beyond with
+    /// journal files are rotated.
     pub journal_limit: usize,
+    /// Define flush batch-size, large batches can give better throughput
+    /// at the expense of data-loss.
     pub batch_size: usize,
+    /// Define flush period, large batch-period can give better throughput
+    /// at the expense of data-loss.
     pub batch_period: time::Duration, // in micro-seconds.
+    /// Enable fsync for every flush.
     pub fsync: bool,
 }
 
@@ -54,6 +66,11 @@ impl Config {
         self
     }
 
+    pub fn set_batch_period(&mut self, batch_period: time::Duration) -> &mut Self {
+        self.batch_period = batch_period;
+        self
+    }
+
     pub fn set_fsync(&mut self, fsync: bool) -> &mut Self {
         self.fsync = fsync;
         self
@@ -61,8 +78,7 @@ impl Config {
 }
 
 /// Write alhead logging.
-/// TODO: make NoState as default type.
-pub struct Wral<S> {
+pub struct Wral<S = state::NoState> {
     config: Config,
 
     tx: thread::Tx<writer::Req, writer::Res>,
@@ -182,7 +198,7 @@ impl<S> Wral<S> {
         Ok(val)
     }
 
-    /// Close the [Wal] instance. To purge the instance use [Wal::purge] api.
+    /// Close the [Wral] instance. To purge the instance use [Wral::purge] api.
     pub fn close(&mut self) -> Result<Option<u64>> {
         match Arc::try_unwrap(self.t.take().unwrap()) {
             Ok(t) => {
@@ -204,7 +220,7 @@ impl<S> Wral<S> {
         }
     }
 
-    /// Purge this [Wal] instance and all its memory and disk footprints.
+    /// Purge this [Wral] instance and all its memory and disk footprints.
     pub fn purge(mut self) -> Result<Option<u64>> {
         match Arc::try_unwrap(self.t.take().unwrap()) {
             Ok(t) => {
@@ -228,7 +244,8 @@ impl<S> Wral<S> {
 }
 
 impl<S> Wral<S> {
-    /// Add a serialized operation to WAL.
+    /// Add a operation to WAL, operations are pre-serialized and opaque to
+    /// Wral instances. Return the sequence-number for this operation.
     pub fn add_op(&self, op: &[u8]) -> Result<u64> {
         let req = writer::Req::AddEntry { op: op.to_vec() };
         let seqno = match self.tx.request(req)? {
@@ -239,10 +256,15 @@ impl<S> Wral<S> {
 }
 
 impl<S> Wral<S> {
+    /// Iterate over all entries in this Wral instance, entries can span
+    /// scross multiple journal files. Iteration will start from lowest
+    /// sequence-number to highest.
     pub fn iter(&self) -> Result<impl Iterator<Item = Result<entry::Entry>>> {
         self.range(..)
     }
 
+    /// Iterate over entries whose sequence number fall within the
+    /// specified `range`.
     pub fn range<R>(&self, range: R) -> Result<impl Iterator<Item = Result<entry::Entry>>>
     where
         R: ops::RangeBounds<u64>,
@@ -321,6 +343,6 @@ impl Iterator for Iter {
     }
 }
 
-//#[cfg(test)]
-//#[path = "wal_test.rs"]
-//mod wal_test;
+#[cfg(test)]
+#[path = "wral_test.rs"]
+mod wral_test;
