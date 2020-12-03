@@ -8,7 +8,7 @@ use std::{
 };
 
 /// Single Op-entry in Write-ahead-log.
-#[derive(Debug, Clone, Cborize, Arbitrary)]
+#[derive(Debug, Clone, Default, Cborize, Arbitrary)]
 pub struct Entry {
     // Index seqno for this entry. This will be monotonically
     // increasing number.

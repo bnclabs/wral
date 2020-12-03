@@ -1,219 +1,71 @@
+use arbitrary::Unstructured;
 use rand::{prelude::random, rngs::SmallRng, Rng, SeedableRng};
 
-use std::sync::atomic::{AtomicU64, Ordering::SeqCst};
-
 use super::*;
-use crate::wal;
-
-#[test]
-fn test_journal_file() {
-    let name = "my-dlog".to_string();
-    let typ = "wal".to_string();
-    let (shard_id, num) = (10, 1);
-
-    let journal_file: JournalFile = (name.clone(), typ.clone(), shard_id, num).into();
-    assert_eq!(
-        journal_file.clone().0.into_string().unwrap(),
-        "my-dlog-wal-shard-010-journal-001.dlog".to_string()
-    );
-
-    let journal_file = journal_file.next();
-    assert_eq!(
-        journal_file.clone().0.into_string().unwrap(),
-        "my-dlog-wal-shard-010-journal-002.dlog".to_string()
-    );
-
-    let (nm, t, id, num) = journal_file.try_into().unwrap();
-    assert_eq!(nm, name);
-    assert_eq!(t, typ);
-    assert_eq!(shard_id, id);
-    assert_eq!(num, 2);
-}
+use crate::state;
 
 #[test]
 fn test_journal() {
-    let seed: u128 = random();
+    let seeds: Vec<u128> = vec![193003787382804392805109954488729196323, random()];
+    let seed = seeds[random::<usize>() % seeds.len()];
+    // let seed: u128 = 148484157541144179681685363423689665370;
+    println!("test_journal {}", seed);
     let mut rng = SmallRng::from_seed(seed.to_le_bytes());
 
-    let dir = {
-        let mut dir = path::PathBuf::new();
-        dir.push(std::env::temp_dir());
-        dir.push("test-journal");
-        dir.into_os_string()
-    };
-    fs::create_dir_all(&dir).unwrap();
+    let name = "test_journal";
+    let dir = tempfile::tempdir().unwrap();
+    println!("test_journal {:?}", dir.path());
+    let mut jn = Journal::start(name, dir.path().as_ref(), 0, state::NoState).unwrap();
+    assert_eq!(jn.to_journal_number(), 0);
+    assert_eq!(jn.len_batches(), 0);
+    assert_eq!(jn.to_state(), state::NoState);
 
-    let mut journal: Journal<wal::State, wal::Op<i64, i64>> = {
-        let name = "journal".to_string();
-        Journal::new_active(dir, name, 1, 1).unwrap()
-    };
-    let limit = 1_000_000_000;
+    let mut entries: Vec<entry::Entry> = (0..1000000)
+        .map(|_i| {
+            let bytes = rng.gen::<[u8; 32]>();
+            let mut uns = Unstructured::new(&bytes);
+            uns.arbitrary::<entry::Entry>().unwrap()
+        })
+        .collect();
+    entries.sort();
 
-    for i in 0..100 {
-        for j in 0..1000 {
-            let op = wal::Op::<i64, i64>::new_set(10 * i + j, 20 + i);
-            let seqno = (i * 1000 + j) as u64 + 1;
-            journal.add_entry(DEntry::new(seqno, op)).unwrap();
+    let mut n_batches = 0;
+    let mut offset = 0;
+    for _i in 0..1000 {
+        let n = rng.gen::<u8>();
+        for _j in 0..n {
+            let entry = entries[offset].clone();
+            jn.add_entry(entry.clone()).unwrap();
+            entries.push(entry);
+            offset += 1;
         }
-        let fsync: bool = rng.gen();
-        assert_eq!(journal.flush1(limit, fsync).unwrap().is_none(), true);
+
+        assert_eq!(jn.to_last_seqno(), Some(entries[offset - 1].to_seqno()));
+
+        jn.flush().unwrap();
+        if n > 0 {
+            n_batches += 1;
+        }
+
+        assert_eq!(jn.to_last_seqno(), Some(entries[offset - 1].to_seqno()));
+    }
+    assert_eq!(n_batches, jn.len_batches());
+
+    let iter = RdJournal::from_journal(&jn, 0..=u64::MAX).unwrap();
+    let jn_entries: Vec<entry::Entry> = iter.map(|x| x.unwrap()).collect();
+    let entries = entries[..offset].to_vec();
+    assert_eq!(entries.len(), jn_entries.len());
+    assert_eq!(entries, jn_entries);
+
+    {
+        let (load_jn, _) = Journal::<state::NoState>::load(name, &jn.to_file_path()).unwrap();
+        let iter = RdJournal::from_journal(&load_jn, 0..=u64::MAX).unwrap();
+        let jn_entries: Vec<entry::Entry> = iter.map(|x| x.unwrap()).collect();
+        let entries = entries[..offset].to_vec();
+        assert_eq!(entries.len(), jn_entries.len());
+        assert_eq!(entries, jn_entries);
     }
 
-    assert_eq!(journal.to_last_seqno().unwrap(), Some(100_000));
-    let rf: &ffi::OsStr = "journal-wal-shard-001-journal-001.dlog".as_ref();
-    assert_eq!(
-        path::Path::new(&journal.to_file_path())
-            .file_name()
-            .unwrap(),
-        rf
-    );
-    assert_eq!(journal.is_cold(), false);
-
-    let mut fd = {
-        let file_path = journal.to_file_path();
-        let mut opts = fs::OpenOptions::new();
-        opts.read(true).open(&file_path).unwrap()
-    };
-    for (i, batch) in journal.into_batches().unwrap().into_iter().enumerate() {
-        let batch = batch.into_active(&mut fd).unwrap();
-        for (j, entry) in batch.into_entries().unwrap().into_iter().enumerate() {
-            let (seqno, op) = entry.into_seqno_op();
-            let ref_seqno = (i * 1000 + j) as u64 + 1;
-            assert_eq!(seqno, ref_seqno);
-            let (k, v) = ((10 * i + j) as i64, (20 + i) as i64);
-            let ref_op = wal::Op::<i64, i64>::new_set(k, v);
-            assert_eq!(op, ref_op);
-        }
-    }
-}
-
-#[test]
-fn test_shard() {
-    let seed: u128 = random();
-    let mut rng = SmallRng::from_seed(seed.to_le_bytes());
-    println!("seed:{}", seed);
-
-    let dir = {
-        let mut dir = path::PathBuf::new();
-        dir.push(std::env::temp_dir());
-        dir.push("test-shard");
-        dir.into_os_string()
-    };
-    fs::create_dir_all(&dir).unwrap();
-
-    for _ in 0..10 {
-        let name = "myshard".to_string();
-        let shard_id = 1;
-        let journal_limit = 1_000_000;
-        let fsync: bool = rng.gen();
-        let dlog_seqno = Arc::new(AtomicU64::new(1));
-        let batch_size = ((rng.gen::<usize>() % 1000) + 1) as i64;
-        let n_batches = (rng.gen::<usize>() % 30) as i64;
-
-        println!(
-            "dir:{:?} fsync:{} batch_size:{} n_batches:{}",
-            dir, fsync, batch_size, n_batches
-        );
-
-        let tshard = Shard::<wal::State, wal::Op<i64, i64>>::create(
-            dir.clone(),
-            name.clone(),
-            shard_id,
-            Arc::clone(&dlog_seqno),
-            journal_limit,
-            batch_size as usize,
-            fsync,
-        )
-        .unwrap()
-        .into_thread();
-
-        let mut ref_entries = vec![];
-
-        for i in 0..n_batches {
-            for j in 0..batch_size {
-                let op = match rng.gen::<u8>() % 3 {
-                    0 => wal::Op::<i64, i64>::new_set(10 * i + j, 20 + i),
-                    1 => {
-                        let cas = i as u64;
-                        wal::Op::<i64, i64>::new_set_cas(10 * i + j, 20 + i, cas)
-                    }
-                    2 => wal::Op::<i64, i64>::new_delete(10 * i + j),
-                    _ => unreachable!(),
-                };
-
-                let seqno = {
-                    match tshard.request(OpRequest::new_op(op.clone())).unwrap() {
-                        OpResponse::Seqno(seqno) => seqno,
-                        _ => unreachable!(),
-                    }
-                };
-
-                ref_entries.push((seqno, op.clone()));
-            }
-        }
-
-        tshard.close_wait().unwrap();
-        assert_eq!(dlog_seqno.load(SeqCst), (n_batches * batch_size + 1) as u64);
-
-        let (last_seqno, shard) = Shard::<wal::State, wal::Op<i64, i64>>::load(
-            dir.clone(),
-            name.clone(),
-            shard_id,
-            Arc::clone(&dlog_seqno),
-            journal_limit,
-            batch_size as usize,
-            fsync,
-        )
-        .unwrap();
-        assert_eq!(last_seqno, (n_batches * batch_size) as u64);
-
-        let journals = shard.into_journals();
-        assert_eq!(dlog_seqno.load(SeqCst), (n_batches * batch_size + 1) as u64);
-
-        if journals.len() > 0 {
-            match &journals[0].inner {
-                InnerJournal::Archive { batches, .. } if batches.len() > 0 => {
-                    assert_eq!(batches[0].to_first_seqno().unwrap(), 1);
-                }
-                InnerJournal::Archive { .. } => (),
-                _ => unreachable!(),
-            };
-        }
-
-        let mut entries = vec![];
-        for journal in journals.into_iter() {
-            let mut fd = {
-                let file_path = journal.to_file_path();
-                let mut opts = fs::OpenOptions::new();
-                opts.read(true).open(&file_path).unwrap()
-            };
-            for batch in journal.into_batches().unwrap().into_iter() {
-                let batch = batch.into_active(&mut fd).unwrap();
-                for entry in batch.into_entries().unwrap().into_iter() {
-                    entries.push(entry);
-                }
-            }
-        }
-
-        assert_eq!(ref_entries.len(), entries.len());
-
-        for (r, e) in ref_entries.into_iter().zip(entries.into_iter()) {
-            let (seqno, op) = e.into_seqno_op();
-            assert_eq!(seqno, r.0);
-            assert_eq!(op, r.1);
-        }
-
-        let (_, shard) = Shard::<wal::State, wal::Op<i64, i64>>::load(
-            dir.clone(),
-            name.clone(),
-            shard_id,
-            Arc::clone(&dlog_seqno),
-            journal_limit,
-            batch_size as usize,
-            fsync,
-        )
-        .unwrap();
-
-        shard.purge().unwrap();
-    }
+    jn.purge().unwrap();
+    dir.close().unwrap();
 }

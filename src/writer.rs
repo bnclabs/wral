@@ -149,7 +149,7 @@ where
         let journal = {
             let num = w.journal.to_journal_number().saturating_add(1);
             let state = w.journal.to_state();
-            Journal::start_journal(&w.config.name, &w.config.dir, num, state)?
+            Journal::start(&w.config.name, &w.config.dir, num, state)?
         };
         // replace with current journal
         let journal = mem::replace(&mut w.journal, journal);

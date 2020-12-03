@@ -45,7 +45,7 @@ enum InnerJournal<S> {
 }
 
 impl<S> Journal<S> {
-    pub fn start_journal(name: &str, dir: &ffi::OsStr, num: usize, state: S) -> Result<Journal<S>> {
+    pub fn start(name: &str, dir: &ffi::OsStr, num: usize, state: S) -> Result<Journal<S>> {
         let file_path: path::PathBuf = {
             let name: &str = name.as_ref();
             let file: ffi::OsString = files::make_filename(name.to_string(), num);
@@ -71,7 +71,7 @@ impl<S> Journal<S> {
         })
     }
 
-    pub fn load_archive(name: &str, file_path: &ffi::OsStr) -> Option<(Journal<S>, S)>
+    pub fn load(name: &str, file_path: &ffi::OsStr) -> Option<(Journal<S>, S)>
     where
         S: Clone + FromCbor,
     {
@@ -249,6 +249,10 @@ impl<S> Journal<S> {
             InnerJournal::Cold => unreachable!(),
         }
     }
+
+    pub fn to_file_path(&self) -> ffi::OsString {
+        self.file_path.clone()
+    }
 }
 
 pub struct RdJournal {
@@ -320,6 +324,6 @@ impl Iterator for RdJournal {
     }
 }
 
-//#[cfg(test)]
-//#[path = "dlog_journal_test.rs"]
-//mod dlog_journal_test;
+#[cfg(test)]
+#[path = "journal_test.rs"]
+mod journal_test;

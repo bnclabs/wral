@@ -108,7 +108,7 @@ impl<S> Wral<S> {
         }
 
         let num = 0;
-        let journal = Journal::start_journal(&config.name, &config.dir, num, state)?;
+        let journal = Journal::start(&config.name, &config.dir, num, state)?;
 
         debug!(target: "wral", "{:?}/{} created", &config.dir, &config.name);
 
@@ -142,7 +142,7 @@ impl<S> Wral<S> {
                 let file_name = err_at!(IOError, item)?.file_name();
                 [config.dir.clone(), file_name.clone()].iter().collect()
             };
-            match Journal::load_archive(&config.name, file_path.as_ref()) {
+            match Journal::load(&config.name, file_path.as_ref()) {
                 Some((journal, state)) => {
                     let seqno = journal.to_last_seqno().unwrap();
                     journals.push((journal, seqno, state));
@@ -159,7 +159,7 @@ impl<S> Wral<S> {
         };
         seqno += 1;
         let num = num.saturating_add(1);
-        let journal = Journal::start_journal(&config.name, &config.dir, num, state)?;
+        let journal = Journal::start(&config.name, &config.dir, num, state)?;
 
         let n_batches: usize = journals.iter().map(|(j, _, _)| j.len_batches()).sum();
         debug!(
