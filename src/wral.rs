@@ -3,7 +3,7 @@
 //! Entries are added to `Wral` journal. Journals automatically rotate
 //! and are numbered from ZERO.
 
-use arbitrary::Arbitrary;
+use arbitrary::{Arbitrary, Unstructured};
 use log::debug;
 use mkit::{self, thread};
 
@@ -25,7 +25,7 @@ pub const BATCH_PERIOD: time::Duration = time::Duration::from_micros(10 * 1000);
 pub const SYNC_BUFFER: usize = 1024;
 
 /// Configuration for [Wral] type.
-#[derive(Debug, Clone, Arbitrary)]
+#[derive(Debug, Clone)]
 pub struct Config {
     /// Uniquely name Wral instances.
     pub name: String,
@@ -42,6 +42,32 @@ pub struct Config {
     pub batch_period: time::Duration, // in micro-seconds.
     /// Enable fsync for every flush.
     pub fsync: bool,
+}
+
+impl Arbitrary for Config {
+    fn arbitrary(u: &mut Unstructured) -> arbitrary::Result<Self> {
+        let name: String = u.arbitrary()?;
+        let dir = tempfile::tempdir().unwrap().path().clone().into();
+
+        let journal_limit = *u.choose(&[100, 1000, 10_000, 1_000_000])?;
+        let batch_size = *u.choose(&[0, 1, 10, 100])?;
+        let batch_period = *u.choose(&[
+            time::Duration::from_micros(1),
+            time::Duration::from_millis(1),
+            time::Duration::from_secs(1),
+        ])?;
+        let fsync: bool = u.arbitrary()?;
+
+        let config = Config {
+            name,
+            dir,
+            journal_limit,
+            batch_size,
+            batch_period,
+            fsync,
+        };
+        Ok(config)
+    }
 }
 
 impl Config {
