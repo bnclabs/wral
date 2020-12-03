@@ -1,4 +1,8 @@
-use mkit::Cborize;
+use arbitrary::Arbitrary;
+use mkit::{
+    Cborize,
+    {cbor::FromCbor, cbor::IntoCbor},
+};
 
 use std::{
     cmp,
@@ -7,7 +11,7 @@ use std::{
 };
 
 /// Single Op-entry in Write-ahead-log.
-#[derive(Cborize, Clone)]
+#[derive(Debug, Clone, Cborize, Arbitrary)]
 pub struct Entry {
     // Index seqno for this entry. This will be monotonically
     // increasing number.
@@ -60,3 +64,7 @@ impl Entry {
         (self.seqno, self.op)
     }
 }
+
+#[cfg(test)]
+#[path = "entry_test.rs"]
+mod entry_test;

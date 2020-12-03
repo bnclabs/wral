@@ -1,3 +1,4 @@
+use arbitrary::{Arbitrary, Unstructured};
 use mkit::{
     self,
     cbor::{Cbor, FromCbor},
@@ -38,13 +39,13 @@ impl<S> Worker<S> {
         Ok(())
     }
 
-    pub fn flush(&mut self, file: &mut fs::File) -> Result<()>
+    pub fn flush(&mut self, file: &mut fs::File) -> Result<Option<Index>>
     where
         S: state::State,
     {
         let fpos = err_at!(IOError, file.metadata())?.len();
         let batch = match self.entries.len() {
-            0 => return Ok(()),
+            0 => return Ok(None),
             _ => Batch {
                 first_seqno: self.entries.first().map(entry::Entry::to_seqno).unwrap(),
                 last_seqno: self.entries.last().map(entry::Entry::to_seqno).unwrap(),
@@ -61,10 +62,10 @@ impl<S> Worker<S> {
             data.len()
         };
 
-        self.index
-            .push(Index::new(fpos, length, first_seqno, last_seqno));
+        let index = Index::new(fpos, length, first_seqno, last_seqno);
+        self.index.push(index.clone());
 
-        Ok(())
+        Ok(Some(index))
     }
 }
 
@@ -101,7 +102,7 @@ impl<S> Worker<S> {
 }
 
 /// Batch of entries on disk or in-memory.
-#[derive(Cborize, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Cborize)]
 pub struct Batch {
     // index-seqno of first entry in this batch.
     first_seqno: u64,
@@ -113,13 +114,27 @@ pub struct Batch {
     entries: Vec<entry::Entry>,
 }
 
+impl arbitrary::Arbitrary for Batch {
+    fn arbitrary(u: &mut Unstructured) -> arbitrary::Result<Self> {
+        let mut entries: Vec<entry::Entry> = u.arbitrary()?;
+        entries.sort();
+
+        let first_seqno: u64 = entries.first().map(|e| e.to_seqno()).unwrap_or(0);
+        let last_seqno: u64 = entries.last().map(|e| e.to_seqno()).unwrap_or(0);
+
+        let batch = Batch {
+            first_seqno,
+            last_seqno,
+            state: u.arbitrary()?,
+            entries,
+        };
+        Ok(batch)
+    }
+}
+
 impl Display for Batch {
     fn fmt(&self, f: &mut fmt::Formatter) -> result::Result<(), fmt::Error> {
-        write!(
-            f,
-            "batch<seqnos:[{},{}]>",
-            self.first_seqno, self.last_seqno
-        )
+        write!(f, "batch<{}..{}]>", self.first_seqno, self.last_seqno)
     }
 }
 
@@ -131,15 +146,7 @@ impl PartialOrd for Batch {
 
 impl Ord for Batch {
     fn cmp(&self, other: &Self) -> cmp::Ordering {
-        if self.eq(other) {
-            cmp::Ordering::Equal
-        } else if self.last_seqno < other.first_seqno {
-            cmp::Ordering::Less
-        } else if other.last_seqno < self.first_seqno {
-            cmp::Ordering::Greater
-        } else {
-            panic!("overlapping batch {} {}", self, other)
-        }
+        self.first_seqno.cmp(&other.first_seqno)
     }
 }
 
@@ -180,7 +187,7 @@ impl Batch {
 }
 
 /// Index of batches on disk.
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Arbitrary)]
 pub struct Index {
     // offset in file, where the batch starts.
     fpos: u64,
@@ -212,3 +219,7 @@ impl Index {
         self.last_seqno
     }
 }
+
+#[cfg(test)]
+#[path = "batch_test.rs"]
+mod batch_test;

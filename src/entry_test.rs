@@ -1,115 +1,45 @@
-use super::*;
+use arbitrary::Unstructured;
+use mkit;
+use rand::{prelude::random, rngs::SmallRng, Rng, SeedableRng};
 
-use std::io::Write;
+use super::*;
 
 #[test]
 fn test_entry() {
-    let _r_entry = DEntry::<i64>::default();
+    use mkit::cbor::Cbor;
 
-    let r_entry = DEntry::<i64>::new(10, 20);
+    let seed: u128 = random();
+    println!("test_entry {}", seed);
+    let mut rng = SmallRng::from_seed(seed.to_le_bytes());
 
-    {
-        let entry = DEntry::<i64>::new(10, 20);
-        assert_eq!(r_entry.seqno, entry.seqno);
-        assert_eq!(r_entry.op, entry.op);
+    let mut entries = vec![];
+    for _i in 0..1000 {
+        let entry: Entry = {
+            let bytes = rng.gen::<[u8; 32]>();
+            let mut uns = Unstructured::new(&bytes);
+            uns.arbitrary().unwrap()
+        };
+        entries.push(entry.clone());
 
-        let (seqno, op) = entry.into_seqno_op();
-        assert_eq!(seqno, 10);
-        assert_eq!(op, 20);
+        assert_eq!(entry.to_seqno(), entry.seqno);
+        let (seqno, op) = entry.clone().unwrap();
+        assert_eq!(entry, Entry::new(seqno, op));
+
+        let cbor: Cbor = entry.clone().into_cbor().unwrap();
+        let mut buf: Vec<u8> = vec![];
+        let n = cbor.encode(&mut buf).unwrap();
+        let (val, m) = Cbor::decode(&mut buf.as_slice()).unwrap();
+        assert_eq!(n, m);
+        assert_eq!(cbor, val);
+
+        let entr = Entry::from_cbor(val).unwrap();
+        assert_eq!(entr, entry);
     }
 
-    let mut buf = vec![];
-    let n = r_entry.encode(&mut buf).unwrap();
-    assert_eq!(n, 16);
-
-    {
-        let mut entry: DEntry<i64> = Default::default();
-        entry.decode(&buf).unwrap();
-        assert_eq!(entry.seqno, r_entry.seqno);
-        assert_eq!(entry.op, r_entry.op);
-    }
-}
-
-#[test]
-fn test_batch1() {
-    use crate::wal;
-
-    let batch1: Batch<wal::State, wal::Op<i64, i64>> = Default::default();
-    let batch2: Batch<wal::State, wal::Op<i64, i64>> = Default::default();
-    assert!(batch1 == batch2);
-}
-
-#[test]
-fn test_batch2() {
-    use crate::wal;
-
-    let validate = |abatch: Batch<wal::State, wal::Op<i64, i64>>| {
-        abatch
-            .into_entries()
-            .unwrap()
-            .into_iter()
-            .enumerate()
-            .for_each(|(i, e)| {
-                let (seqno, op) = e.into_seqno_op();
-                assert_eq!(seqno, (i + 1) as u64);
-                assert_eq!(op, wal::Op::<i64, i64>::new_set(10, 20));
-            })
-    };
-
-    let batch = {
-        let mut batch = Batch::<wal::State, wal::Op<i64, i64>>::default_active();
-
-        assert_eq!(batch.len().unwrap(), 0);
-
-        for i in 0..100 {
-            let op = wal::Op::new_set(10, 20);
-            batch.add_entry(DEntry::new(i + 1, op)).unwrap();
-        }
-        batch
-    };
-    assert_eq!(batch.to_first_seqno().unwrap(), 1);
-    assert_eq!(batch.to_last_seqno().unwrap(), 100);
-    assert_eq!(batch.len().unwrap(), 100);
-
-    validate(batch.clone());
-
-    let mut buf = vec![];
-    let length = batch.encode_active(&mut buf).unwrap();
-    assert_eq!(length, 4099);
-
-    let file = {
-        let mut dir = std::env::temp_dir();
-        dir.push("test-dlog-entry-batch2");
-        fs::create_dir_all(&dir).unwrap();
-        dir.push("batch2.dlog");
-        dir.into_os_string()
-    };
-    fs::File::create(&file).unwrap().write(&buf).unwrap();
-
-    let rbatch = Batch::<wal::State, wal::Op<i64, i64>>::new_refer(
-        //
-        0, length, 1, 100,
-    );
-    let mut fd = fs::File::open(&file).unwrap();
-    let abatch = rbatch.into_active(&mut fd).unwrap();
-    validate(abatch);
-
-    let mut batch = Batch::<wal::State, wal::Op<i64, i64>>::default_active();
-    let n = batch.decode_refer(&buf, 0).unwrap();
-    assert_eq!(n, 4099);
-    match batch {
-        Batch::Refer {
-            fpos: 0,
-            length: 4099,
-            start_seqno: 1,
-            last_seqno: 100,
-        } => (),
-        Batch::Refer {
-            fpos,
-            length,
-            start_seqno,
-            last_seqno,
-        } => panic!("{} {} {} {}", fpos, length, start_seqno, last_seqno),
-        _ => unreachable!(),
+    entries.sort();
+    let mut seqno = 0;
+    for entry in entries.into_iter() {
+        assert!(seqno < entry.seqno, "{} {}", seqno, entry.seqno);
+        seqno = entry.seqno
     }
 }

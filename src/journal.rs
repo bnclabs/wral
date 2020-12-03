@@ -195,7 +195,10 @@ impl<S> Journal<S> {
         S: state::State,
     {
         match &mut self.inner {
-            InnerJournal::Working { worker, file } => worker.flush(file),
+            InnerJournal::Working { worker, file } => {
+                worker.flush(file)?;
+                Ok(())
+            }
             InnerJournal::Archive { .. } => unreachable!(),
             InnerJournal::Cold { .. } => unreachable!(),
         }

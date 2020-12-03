@@ -65,7 +65,7 @@ pub struct Wral<S> {
     config: Config,
 
     tx: thread::Tx<writer::Req, writer::Res>,
-    t: Option<Arc<mkit::Thread<writer::Req, writer::Res, Result<u64>>>>,
+    t: Option<Arc<mkit::thread::Thread<writer::Req, writer::Res, Result<u64>>>>,
     w: Option<Arc<RwLock<writer::Writer<S>>>>,
 }
 

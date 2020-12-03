@@ -14,4 +14,8 @@ edition = "2018"
 
 [dependencies]
 mkit = { path = "../mkit" }
-log = "0.4.8"
+log = "0.4"
+arbitrary = { version = "0.4", features = ["derive"] }
+
+[dev-dependencies]
+rand = { version = "0.7.3", features = ["small_rng"] }
