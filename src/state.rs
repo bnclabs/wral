@@ -4,15 +4,15 @@ use mkit::{
 };
 
 #[allow(unused_imports)]
-use crate::wral::Wral;
+use crate::wral::Wal;
 use crate::{entry::Entry, Result};
 
-/// Callback trait for updating application state in relation to [Wral] type.
+/// Callback trait for updating application state in relation to [Wal] type.
 pub trait State: 'static + Clone + Sync + Send + IntoCbor + FromCbor {
     fn on_add_entry(&mut self, new_entry: &Entry) -> Result<()>;
 }
 
-/// Default parameter, implementing [State] trait, for [Wral] type.
+/// Default parameter, implementing [State] trait, for [Wal] type.
 #[derive(Clone, Eq, PartialEq, Debug, Cborize)]
 pub struct NoState;
 

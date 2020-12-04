@@ -64,7 +64,7 @@ mod writer;
 
 pub use crate::state::{NoState, State};
 pub use crate::wral::Config;
-pub use crate::wral::Wral;
+pub use crate::wral::Wal;
 
 /// Type alias for Result return type, used by this package.
 pub type Result<T> = result::Result<T, Error>;

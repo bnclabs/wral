@@ -1,6 +1,6 @@
 //! Package implement WRite-Ahead-Logging.
 //!
-//! Entries are added to `Wral` journal. Journals automatically rotate
+//! Entries are added to `Wal` journal. Journals automatically rotate
 //! and are numbered from ZERO.
 
 use arbitrary::{Arbitrary, Unstructured};
@@ -8,7 +8,7 @@ use log::debug;
 use mkit::{self, thread};
 
 use std::{
-    ffi, fs, ops, path,
+    ffi, fs, mem, ops, path,
     sync::{Arc, RwLock},
     time, vec,
 };
@@ -21,13 +21,13 @@ pub const JOURNAL_LIMIT: usize = 1 * 1024 * 1024 * 1024;
 pub const BATCH_SIZE: usize = 1 * 1024 * 1024; // 1MB.
 /// Default batch-period for flush is set at 10ms.
 pub const BATCH_PERIOD: time::Duration = time::Duration::from_micros(10 * 1000); // 10ms
-
+/// Default channel buffer for writer thread.
 pub const SYNC_BUFFER: usize = 1024;
 
-/// Configuration for [Wral] type.
+/// Configuration for [Wal] type.
 #[derive(Debug, Clone)]
 pub struct Config {
-    /// Uniquely name Wral instances.
+    /// Uniquely name Wal instances.
     pub name: String,
     /// Directory in which wral journals are stored.
     pub dir: ffi::OsString,
@@ -104,30 +104,30 @@ impl Config {
 }
 
 /// Write alhead logging.
-pub struct Wral<S = state::NoState> {
+pub struct Wal<S = state::NoState> {
     config: Config,
 
     tx: thread::Tx<writer::Req, writer::Res>,
-    t: Option<Arc<mkit::thread::Thread<writer::Req, writer::Res, Result<u64>>>>,
-    w: Option<Arc<RwLock<writer::Writer<S>>>>,
+    t: Arc<RwLock<mkit::thread::Thread<writer::Req, writer::Res, Result<u64>>>>,
+    w: Arc<RwLock<writer::Writer<S>>>,
 }
 
-impl<S> Clone for Wral<S> {
-    fn clone(&self) -> Wral<S> {
-        Wral {
+impl<S> Clone for Wal<S> {
+    fn clone(&self) -> Wal<S> {
+        Wal {
             config: self.config.clone(),
 
             tx: self.tx.clone(),
-            t: self.t.as_ref().map(|t| Arc::clone(t)),
-            w: self.w.as_ref().map(|w| Arc::clone(w)),
+            t: Arc::clone(&self.t),
+            w: Arc::clone(&self.w),
         }
     }
 }
 
-impl<S> Wral<S> {
+impl<S> Wal<S> {
     /// Create a new Write-Ahead-Log instance, while create a new journal,
     /// older journals matching the `name` shall be purged.
-    pub fn create(config: Config, state: S) -> Result<Wral<S>>
+    pub fn create(config: Config, state: S) -> Result<Wal<S>>
     where
         S: state::State,
     {
@@ -155,14 +155,14 @@ impl<S> Wral<S> {
         debug!(target: "wral", "{:?}/{} created", &config.dir, &config.name);
 
         let seqno = 1;
-        let (w, t) = writer::Writer::start(config.clone(), vec![], journal, seqno);
+        let (w, t, tx) = writer::Writer::start(config.clone(), vec![], journal, seqno);
 
-        let val = Wral {
+        let val = Wal {
             config,
 
-            tx: t.clone_tx(),
-            t: Some(Arc::new(t)),
-            w: Some(w),
+            tx,
+            t: Arc::new(RwLock::new(t)),
+            w: w,
         };
 
         Ok(val)
@@ -174,7 +174,7 @@ impl<S> Wral<S> {
     ///
     /// Application state shall be loaded from the last batch of the
     /// last journal.
-    pub fn load(config: Config) -> Result<Wral<S>>
+    pub fn load(config: Config) -> Result<Wal<S>>
     where
         S: Default + state::State,
     {
@@ -211,67 +211,42 @@ impl<S> Wral<S> {
         );
 
         let journals: Vec<Journal<S>> = journals.into_iter().map(|(j, _, _)| j).collect();
-        let (w, t) = writer::Writer::start(config.clone(), journals, journal, seqno);
+        let (w, t, tx) = writer::Writer::start(config.clone(), journals, journal, seqno);
 
-        let val = Wral {
+        let val = Wal {
             config,
 
-            tx: t.clone_tx(),
-            t: Some(Arc::new(t)),
-            w: Some(w),
+            tx,
+            t: Arc::new(RwLock::new(t)),
+            w: w,
         };
 
         Ok(val)
     }
 
-    /// Close the [Wral] instance. To purge the instance use [Wral::purge] api.
-    pub fn close(&mut self) -> Result<Option<u64>> {
-        match Arc::try_unwrap(self.t.take().unwrap()) {
+    /// Close the [Wal] instance. To purge the instance pass `purge` as true.
+    pub fn close(self, purge: bool) -> Result<Option<u64>> {
+        match Arc::try_unwrap(self.t) {
             Ok(t) => {
-                (t.close_wait()?)?;
-            }
-            Err(t) => {
-                self.t = Some(t);
-            }
-        }
-        match Arc::try_unwrap(self.w.take().unwrap()) {
-            Ok(w) => {
-                let w = err_at!(IPCFail, w.into_inner())?;
-                Ok(Some(w.close()?))
-            }
-            Err(w) => {
-                self.w = Some(w);
-                Ok(None)
-            }
-        }
-    }
+                mem::drop(self.tx);
+                (err_at!(IPCFail, t.into_inner())?.close_wait()?)?;
 
-    /// Purge this [Wral] instance and all its memory and disk footprints.
-    pub fn purge(mut self) -> Result<Option<u64>> {
-        match Arc::try_unwrap(self.t.take().unwrap()) {
-            Ok(t) => {
-                (t.close_wait()?)?;
+                match Arc::try_unwrap(self.w) {
+                    Ok(w) => {
+                        let w = err_at!(IPCFail, w.into_inner())?;
+                        Ok(Some(if purge { w.purge()? } else { w.close()? }))
+                    }
+                    Err(_) => Ok(None), // there are active clones
+                }
             }
-            Err(t) => {
-                self.t = Some(t);
-            }
-        }
-        match Arc::try_unwrap(self.w.take().unwrap()) {
-            Ok(w) => {
-                let w = err_at!(IPCFail, w.into_inner())?;
-                Ok(Some(w.purge()?))
-            }
-            Err(w) => {
-                self.w = Some(w);
-                Ok(None)
-            }
+            Err(_) => Ok(None), // there are active clones
         }
     }
 }
 
-impl<S> Wral<S> {
+impl<S> Wal<S> {
     /// Add a operation to WAL, operations are pre-serialized and opaque to
-    /// Wral instances. Return the sequence-number for this operation.
+    /// Wal instances. Return the sequence-number for this operation.
     pub fn add_op(&self, op: &[u8]) -> Result<u64> {
         let req = writer::Req::AddEntry { op: op.to_vec() };
         let seqno = match self.tx.request(req)? {
@@ -281,8 +256,8 @@ impl<S> Wral<S> {
     }
 }
 
-impl<S> Wral<S> {
-    /// Iterate over all entries in this Wral instance, entries can span
+impl<S> Wal<S> {
+    /// Iterate over all entries in this Wal instance, entries can span
     /// scross multiple journal files. Iteration will start from lowest
     /// sequence-number to highest.
     pub fn iter(&self) -> Result<impl Iterator<Item = Result<entry::Entry>>> {
@@ -297,10 +272,7 @@ impl<S> Wral<S> {
     {
         let journals = match Self::range_bound_to_range_inclusive(range) {
             Some(range) => {
-                let rd = {
-                    let m = self.w.as_ref().unwrap();
-                    err_at!(Fatal, m.read())?
-                };
+                let rd = err_at!(Fatal, self.w.read())?;
                 let mut journals = vec![];
                 for jn in rd.journals.iter() {
                     journals.push(journal::RdJournal::from_journal(jn, range.clone())?);

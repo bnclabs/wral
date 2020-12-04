@@ -16,10 +16,12 @@ use std::{
 
 use crate::{entry, journal::Journal, state, wral, wral::Config, Error, Result};
 
+#[derive(Debug)]
 pub enum Req {
     AddEntry { op: Vec<u8> },
 }
 
+#[derive(Debug)]
 pub enum Res {
     Seqno(u64),
 }
@@ -40,6 +42,7 @@ impl<S> Writer<S> {
     ) -> (
         Arc<RwLock<Writer<S>>>,
         thread::Thread<Req, Res, Result<u64>>,
+        thread::Tx<Req, Res>,
     )
     where
         S: state::State,
@@ -53,7 +56,7 @@ impl<S> Writer<S> {
         }));
         let name = format!("wral-writer-{}", config.name);
         let thread_w = Arc::clone(&w);
-        let t =
+        let (t, tx) =
             thread::Thread::new_sync(&name, wral::SYNC_BUFFER, move |rx: thread::Rx<Req, Res>| {
                 MainLoop {
                     config,
@@ -62,7 +65,8 @@ impl<S> Writer<S> {
                     rx,
                 }
             });
-        (w, t)
+
+        (w, t, tx)
     }
 
     pub fn close(&self) -> Result<u64> {
