@@ -1,4 +1,11 @@
 //! Package implement Write-Ahead-Logging.
+//!
+//! Write-Ahead-Logging is implemented by [Wal] type, to get started create
+//! a configuration [Config] value. Subsequently, a fresh Wal instance can be
+//! created or existing Wal from disk can be loaded, using the configuration.
+//! Wal optionally takes a type parameter `S` for state, that can be used by
+//! application to persist storage state along with each batch.
+//! By default, `NoState` is used.
 
 #![feature(unboxed_closures)]
 #![feature(fn_traits)]
