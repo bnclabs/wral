@@ -6,6 +6,38 @@
 //! Wal optionally takes a type parameter `S` for state, that can be used by
 //! application to persist storage state along with each batch.
 //! By default, `NoState` is used.
+//!
+//! Concurrent writers
+//! ------------------
+//!
+//! [Wal] writes are batch-processed, where batching is automatically dictated
+//! by storage (disk, ssd) latency. Latency can get higher when `fsync` is
+//! enabled for every batch flush. With fsync enabled it is hard to reduce
+//! the latency, and to get better throughput applications can do concurrent
+//! writes. This is possbile because [Wal] type can be cloned with underlying
+//! structure safely shared among all the clones. For example,
+//!
+//! ```ignore
+//! let wal = wral::Wal::create(config, wral::NoState).unwrap();
+//! let mut writers = vec![];
+//! for id in 0..n_threads {
+//!     let wal = wal.clone();
+//!     writers.push(std::thread::spawn(move || writer(id, wal)));
+//! }
+//! ```
+//!
+//! Application employing concurrent [Wal] must keep in mind that `seqno`
+//! generated for consecutive ops may not be monotonically increasing, and
+//! must make sure to serialize operations across the writers through other
+//! means.
+//!
+//! Concurrent readers
+//! ------------------
+//!
+//! It is possible for a [Wal] value and its clones to concurrently read the
+//! log journal (typically iterating over its entries). Only that read
+//! operations shall block concurrent writes and vice-versa. But concurrent
+//! reads shall be allowed.
 
 #![feature(unboxed_closures)]
 #![feature(fn_traits)]
