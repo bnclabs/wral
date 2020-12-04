@@ -69,6 +69,7 @@ mod util;
 mod wral;
 mod writer;
 
+pub use crate::entry::Entry;
 pub use crate::state::{NoState, State};
 pub use crate::wral::Config;
 pub use crate::wral::Wal;

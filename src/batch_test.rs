@@ -31,13 +31,14 @@ fn test_index() {
 fn test_batch() {
     let seeds: Vec<u128> = vec![
         225569602694000826843969627559726108824,
+        214504593551397116282345381712716803483,
         177121329091129258928668221088480874568,
         random(),
         random(),
         random(),
     ];
     let seed = seeds[random::<usize>() % seeds.len()];
-    // let seed: u128 = 177121329091129258928668221088480874568;
+    // let seed: u128 = 214504593551397116282345381712716803483;
     println!("test_batch {}", seed);
     let mut rng = SmallRng::from_seed(seed.to_le_bytes());
 
@@ -82,7 +83,12 @@ fn test_batch() {
 
     let mut seqno = 0;
     for batch in batches.into_iter() {
-        assert!(seqno < batch.first_seqno, "{} {}", seqno, batch.first_seqno);
+        assert!(
+            seqno <= batch.first_seqno,
+            "{} {}",
+            seqno,
+            batch.first_seqno
+        );
         assert!(batch.first_seqno <= batch.last_seqno, batch);
         seqno = batch.first_seqno
     }

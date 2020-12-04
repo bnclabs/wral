@@ -11,7 +11,6 @@ use std::{
         atomic::{AtomicU64, Ordering::SeqCst},
         Arc, RwLock,
     },
-    time,
 };
 
 use crate::{entry, journal::Journal, state, wral, wral::Config, Error, Result};
@@ -110,33 +109,51 @@ where
     type Output = Result<u64>;
 
     extern "rust-call" fn call_once(self, _args: ()) -> Self::Output {
-        let mut batch_size = self.config.batch_size;
-        let mut last_flush = time::Instant::now();
-        for req in self.rx {
-            match req {
-                (Req::AddEntry { op }, tx) => {
-                    let mut w = err_at!(Fatal, self.w.write())?;
-                    let seqno = self.seqno.fetch_add(1, SeqCst);
-                    w.journal.add_entry(entry::Entry::new(seqno, op))?;
+        use std::sync::mpsc::TryRecvError;
 
-                    batch_size = batch_size.saturating_sub(1);
+        'a: loop {
+            // block for the first request.
+            let req = match self.rx.recv() {
+                Ok(req) => req,
+                Err(_) => {
+                    // TODO: Log information here.
+                    break;
+                }
+            };
+            // then get as many outstanding requests as possible from
+            // the channel.
+            let mut reqs = vec![req];
+            loop {
+                match self.rx.try_recv() {
+                    Ok(req) => reqs.push(req),
+                    Err(TryRecvError::Empty) => break,
+                    Err(TryRecvError::Disconnected) => break 'a,
+                }
+            }
+            // and then start processing it in batch.
+            let mut w = err_at!(Fatal, self.w.write())?;
 
-                    if batch_size == 0 || last_flush.elapsed() > self.config.batch_period {
-                        w.journal.flush()?;
-                        // reload the flush thresholds
-                        batch_size = self.config.batch_size;
-                        last_flush = time::Instant::now();
-                    }
-
-                    match tx {
-                        Some(tx) => err_at!(IPCFail, tx.send(Res::Seqno(seqno)))?,
-                        None => (),
-                    }
-
-                    if w.journal.file_size()? > self.config.journal_limit {
-                        Self::rotate(w.borrow_mut())?;
+            let mut items = vec![];
+            for req in reqs.into_iter() {
+                match req {
+                    (Req::AddEntry { op }, tx) => {
+                        let seqno = self.seqno.fetch_add(1, SeqCst);
+                        w.journal.add_entry(entry::Entry::new(seqno, op))?;
+                        items.push((seqno, tx))
                     }
                 }
+            }
+            w.journal.flush()?;
+
+            for (seqno, tx) in items.into_iter() {
+                match tx {
+                    Some(tx) => err_at!(IPCFail, tx.send(Res::Seqno(seqno)))?,
+                    None => (),
+                }
+            }
+
+            if w.journal.file_size()? > self.config.journal_limit {
+                Self::rotate(w.borrow_mut())?;
             }
         }
 

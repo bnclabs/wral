@@ -10,17 +10,13 @@ use mkit::{self, thread};
 use std::{
     ffi, fs, mem, ops, path,
     sync::{Arc, RwLock},
-    time, vec,
+    vec,
 };
 
 use crate::{entry, journal, journal::Journal, state, writer, Error, Result};
 
 /// Default journal file limit is set at 1GB.
 pub const JOURNAL_LIMIT: usize = 1 * 1024 * 1024 * 1024;
-/// Default batch-size for flush is set at 1MB.
-pub const BATCH_SIZE: usize = 1 * 1024 * 1024; // 1MB.
-/// Default batch-period for flush is set at 10ms.
-pub const BATCH_PERIOD: time::Duration = time::Duration::from_micros(10 * 1000); // 10ms
 /// Default channel buffer for writer thread.
 pub const SYNC_BUFFER: usize = 1024;
 
@@ -34,12 +30,6 @@ pub struct Config {
     /// Define file-size limit for a single journal file, beyond with
     /// journal files are rotated.
     pub journal_limit: usize,
-    /// Define flush batch-size, large batches can give better throughput
-    /// at the expense of data-loss.
-    pub batch_size: usize,
-    /// Define flush period, large batch-period can give better throughput
-    /// at the expense of data-loss.
-    pub batch_period: time::Duration, // in micro-seconds.
     /// Enable fsync for every flush.
     pub fsync: bool,
 }
@@ -50,20 +40,12 @@ impl Arbitrary for Config {
         let dir = tempfile::tempdir().unwrap().path().clone().into();
 
         let journal_limit = *u.choose(&[100, 1000, 10_000, 1_000_000])?;
-        let batch_size = *u.choose(&[0, 1, 10, 100])?;
-        let batch_period = *u.choose(&[
-            time::Duration::from_micros(1),
-            time::Duration::from_millis(1),
-            time::Duration::from_secs(1),
-        ])?;
         let fsync: bool = u.arbitrary()?;
 
         let config = Config {
             name,
             dir,
             journal_limit,
-            batch_size,
-            batch_period,
             fsync,
         };
         Ok(config)
@@ -76,24 +58,12 @@ impl Config {
             name: name.to_string(),
             dir: dir.to_os_string(),
             journal_limit: JOURNAL_LIMIT,
-            batch_size: BATCH_SIZE,
-            batch_period: BATCH_PERIOD,
             fsync: true,
         }
     }
 
     pub fn set_journal_limit(&mut self, journal_limit: usize) -> &mut Self {
         self.journal_limit = journal_limit;
-        self
-    }
-
-    pub fn set_batch_size(&mut self, batch_size: usize) -> &mut Self {
-        self.batch_size = batch_size;
-        self
-    }
-
-    pub fn set_batch_period(&mut self, batch_period: time::Duration) -> &mut Self {
-        self.batch_period = batch_period;
         self
     }
 

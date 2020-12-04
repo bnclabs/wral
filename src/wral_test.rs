@@ -37,6 +37,10 @@ fn test_wal() {
     }
     let entries: Vec<entry::Entry> = entries.into_iter().flatten().collect();
 
+    let n = entries.len() as u64;
+    let sum = entries.iter().map(|e| e.to_seqno()).sum::<u64>();
+    assert_eq!(sum, (n * (n + 1)) / 2);
+
     let mut readers = vec![];
     for id in 0..n_threads {
         let wal = val.clone();
