@@ -32,17 +32,19 @@ pub struct Writer<S> {
     pub journal: Journal<S>,
 }
 
+type SpawnWriter<S> = (
+    Arc<RwLock<Writer<S>>>,
+    thread::Thread<Req, Res, Result<u64>>,
+    thread::Tx<Req, Res>,
+);
+
 impl<S> Writer<S> {
     pub(crate) fn start(
         config: Config,
         journals: Vec<Journal<S>>,
         journal: Journal<S>,
         seqno: u64,
-    ) -> (
-        Arc<RwLock<Writer<S>>>,
-        thread::Thread<Req, Res, Result<u64>>,
-        thread::Tx<Req, Res>,
-    )
+    ) -> SpawnWriter<S>
     where
         S: state::State,
     {
@@ -111,15 +113,8 @@ where
     extern "rust-call" fn call_once(self, _args: ()) -> Self::Output {
         use std::sync::mpsc::TryRecvError;
 
-        'a: loop {
-            // block for the first request.
-            let req = match self.rx.recv() {
-                Ok(req) => req,
-                Err(_) => {
-                    // TODO: Log information here.
-                    break;
-                }
-            };
+        // block for the first request.
+        'a: while let Ok(req) = self.rx.recv() {
             // then get as many outstanding requests as possible from
             // the channel.
             let mut reqs = vec![req];
@@ -146,9 +141,8 @@ where
             w.journal.flush()?;
 
             for (seqno, tx) in items.into_iter() {
-                match tx {
-                    Some(tx) => err_at!(IPCFail, tx.send(Res::Seqno(seqno)))?,
-                    None => (),
+                if let Some(tx) = tx {
+                    err_at!(IPCFail, tx.send(Res::Seqno(seqno)))?;
                 }
             }
 
@@ -175,7 +169,7 @@ where
         // replace with current journal
         let journal = mem::replace(&mut w.journal, journal);
         let (journal, entries, _) = journal.into_archive();
-        if entries.len() != 0 {
+        if !entries.is_empty() {
             err_at!(Fatal, msg: "unflushed entries {}", entries.len())?
         }
         w.journals.push(journal);

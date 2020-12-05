@@ -18,10 +18,10 @@ fn test_wal() {
     };
     config.name = "test-wal".to_string();
     let dir = tempfile::tempdir().unwrap();
-    config.dir = dir.path().clone().into();
+    config.dir = dir.path().into();
 
     println!("{:?}", config);
-    let val = Wal::create(config.clone(), state::NoState).unwrap();
+    let val = Wal::create(config, state::NoState).unwrap();
 
     let n_threads = 1;
 
@@ -33,7 +33,7 @@ fn test_wal() {
 
     let mut entries: Vec<Vec<entry::Entry>> = vec![];
     for handle in writers {
-        entries.push(handle.join().unwrap().unwrap());
+        entries.push(handle.join().unwrap());
     }
     let entries: Vec<entry::Entry> = entries.into_iter().flatten().collect();
 
@@ -51,13 +51,13 @@ fn test_wal() {
     }
 
     for handle in readers {
-        handle.join().unwrap().unwrap();
+        handle.join().unwrap();
     }
 
     val.close(true).unwrap();
 }
 
-fn writer(_id: u128, wal: Wal, ops: usize, seed: u128) -> Result<Vec<entry::Entry>> {
+fn writer(_id: u128, wal: Wal, ops: usize, seed: u128) -> Vec<entry::Entry> {
     let mut rng = SmallRng::from_seed(seed.to_le_bytes());
 
     let mut entries = vec![];
@@ -71,10 +71,10 @@ fn writer(_id: u128, wal: Wal, ops: usize, seed: u128) -> Result<Vec<entry::Entr
         entries.push(entry::Entry::new(seqno, op));
     }
 
-    Ok(entries)
+    entries
 }
 
-fn reader(_id: u128, wal: Wal, ops: usize, seed: u128, entries: Vec<entry::Entry>) -> Result<()> {
+fn reader(_id: u128, wal: Wal, ops: usize, seed: u128, entries: Vec<entry::Entry>) {
     let mut rng = SmallRng::from_seed(seed.to_le_bytes());
 
     for _i in 0..ops {
@@ -94,5 +94,4 @@ fn reader(_id: u128, wal: Wal, ops: usize, seed: u128, entries: Vec<entry::Entry
             _ => unreachable!(),
         }
     }
-    Ok(())
 }

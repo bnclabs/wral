@@ -47,7 +47,6 @@ enum InnerJournal<S> {
 impl<S> Journal<S> {
     pub fn start(name: &str, dir: &ffi::OsStr, num: usize, state: S) -> Result<Journal<S>> {
         let file_path: path::PathBuf = {
-            let name: &str = name.as_ref();
             let file: ffi::OsString = files::make_filename(name.to_string(), num);
             [dir, &file].iter().collect()
         };
@@ -102,7 +101,7 @@ impl<S> Journal<S> {
             fpos += n
         }
 
-        if index.len() == 0 {
+        if index.is_empty() {
             return None;
         }
 
@@ -221,7 +220,7 @@ impl<S> Journal<S> {
     pub fn to_last_seqno(&self) -> Option<u64> {
         match &self.inner {
             InnerJournal::Working { worker, .. } => worker.to_last_seqno(),
-            InnerJournal::Archive { index, .. } if index.len() == 0 => None,
+            InnerJournal::Archive { index, .. } if index.is_empty() => None,
             InnerJournal::Archive { index, .. } => index.last().map(batch::Index::to_last_seqno),
             _ => None,
         }

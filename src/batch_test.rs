@@ -76,7 +76,7 @@ fn test_batch() {
 
     let mut batches: Vec<Batch> = batches
         .into_iter()
-        .filter(|b| b.entries.len() > 0)
+        .filter(|b| b.entries.is_empty())
         .collect();
     batches.sort();
     batches.dedup_by(|a, b| a.first_seqno == b.first_seqno);
@@ -133,7 +133,9 @@ fn test_worker() {
             assert_eq!(entries.last().map(|e| e.to_seqno()), worker.to_last_seqno())
         }
 
-        worker.flush(&mut file).unwrap().map(|x| index.push(x));
+        if let Some(x) = worker.flush(&mut file).unwrap() {
+            index.push(x)
+        };
 
         if n > 0 {
             assert_eq!(entries.last().map(|e| e.to_seqno()), worker.to_last_seqno())

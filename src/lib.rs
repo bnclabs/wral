@@ -27,22 +27,20 @@
 //! ```
 //!
 //! Application employing concurrent [Wal] must keep in mind that `seqno`
-//! generated for consecutive ops may not be monotonically increasing, and
-//! must make sure to serialize operations across the writers through other
-//! means.
+//! generated for consecutive ops may not be monotonically increasing within
+//! the same thread, and must make sure to serialize operations across the
+//! writers through other means.
 //!
 //! Concurrent readers
 //! ------------------
 //!
 //! It is possible for a [Wal] value and its clones to concurrently read the
-//! log journal (typically iterating over its entries). Only that read
+//! log journal (typically iterating over its entries). Remember that read
 //! operations shall block concurrent writes and vice-versa. But concurrent
 //! reads shall be allowed.
 
 #![feature(unboxed_closures)]
 #![feature(fn_traits)]
-
-use mkit;
 
 use std::{error, fmt, result};
 

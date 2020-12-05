@@ -16,7 +16,7 @@ use std::{
 use crate::{entry, journal, journal::Journal, state, writer, Error, Result};
 
 /// Default journal file limit is set at 1GB.
-pub const JOURNAL_LIMIT: usize = 1 * 1024 * 1024 * 1024;
+pub const JOURNAL_LIMIT: usize = 1024 * 1024 * 1024;
 /// Default channel buffer for writer thread.
 pub const SYNC_BUFFER: usize = 1024;
 
@@ -37,7 +37,7 @@ pub struct Config {
 impl Arbitrary for Config {
     fn arbitrary(u: &mut Unstructured) -> arbitrary::Result<Self> {
         let name: String = u.arbitrary()?;
-        let dir = tempfile::tempdir().unwrap().path().clone().into();
+        let dir = tempfile::tempdir().unwrap().path().into();
 
         let journal_limit = *u.choose(&[100, 1000, 10_000, 1_000_000])?;
         let fsync: bool = u.arbitrary()?;
@@ -132,7 +132,7 @@ impl<S> Wal<S> {
 
             tx,
             t: Arc::new(RwLock::new(t)),
-            w: w,
+            w,
         };
 
         Ok(val)
@@ -188,7 +188,7 @@ impl<S> Wal<S> {
 
             tx,
             t: Arc::new(RwLock::new(t)),
-            w: w,
+            w,
         };
 
         Ok(val)
@@ -219,9 +219,7 @@ impl<S> Wal<S> {
     /// Wal instances. Return the sequence-number for this operation.
     pub fn add_op(&self, op: &[u8]) -> Result<u64> {
         let req = writer::Req::AddEntry { op: op.to_vec() };
-        let seqno = match self.tx.request(req)? {
-            writer::Res::Seqno(seqno) => seqno,
-        };
+        let writer::Res::Seqno(seqno) = self.tx.request(req)?;
         Ok(seqno)
     }
 }

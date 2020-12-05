@@ -3,7 +3,7 @@ use structopt::StructOpt;
 
 use std::time;
 
-use wral::{self, Result};
+use wral::{self};
 
 // Command line options.
 #[derive(Clone, StructOpt)]
@@ -26,12 +26,6 @@ pub struct Opt {
     #[structopt(long = "size", default_value = "1000000")] // default 1M bytes
     journal_limit: usize,
 
-    #[structopt(long = "batch-size", default_value = "64")] // 64 ops.
-    batch_size: usize,
-
-    #[structopt(long = "batch-period", default_value = "15")] // 15 milliseconds
-    batch_period: u64,
-
     #[structopt(long = "nosync")]
     nosync: bool,
 }
@@ -39,13 +33,11 @@ pub struct Opt {
 fn main() {
     let dir = tempfile::tempdir().unwrap();
     let opts = Opt::from_args();
-    let seed = opts.seed.unwrap_or(random());
+    let seed = opts.seed.unwrap_or_else(random);
 
     let mut config = wral::Config::new(&opts.name, dir.path().as_os_str());
     config
         .set_journal_limit(opts.journal_limit)
-        .set_batch_size(opts.batch_size)
-        .set_batch_period(time::Duration::from_millis(opts.batch_period))
         .set_fsync(!opts.nosync);
     println!("{:?}", config);
 
@@ -60,10 +52,10 @@ fn main() {
 
     let mut entries: Vec<Vec<wral::Entry>> = vec![];
     for handle in writers {
-        entries.push(handle.join().unwrap().unwrap());
+        entries.push(handle.join().unwrap());
     }
     let mut entries: Vec<wral::Entry> = entries.into_iter().flatten().collect();
-    entries.sort_by(|a, b| a.to_seqno().cmp(&b.to_seqno()));
+    entries.sort_by_key(|a| a.to_seqno());
 
     let n = entries.len() as u64;
     let sum = entries.iter().map(|e| e.to_seqno()).sum::<u64>();
@@ -77,13 +69,13 @@ fn main() {
     }
 
     for handle in readers {
-        handle.join().unwrap().unwrap();
+        handle.join().unwrap();
     }
 
     wal.close(true).unwrap();
 }
 
-fn writer(id: usize, wal: wral::Wal, opts: Opt, _seed: u128) -> Result<Vec<wral::Entry>> {
+fn writer(id: usize, wal: wral::Wal, opts: Opt, _seed: u128) -> Vec<wral::Entry> {
     let start = time::Instant::now();
 
     let mut entries = vec![];
@@ -99,10 +91,10 @@ fn writer(id: usize, wal: wral::Wal, opts: Opt, _seed: u128) -> Result<Vec<wral:
         start.elapsed(),
         opts.ops
     );
-    Ok(entries)
+    entries
 }
 
-fn reader(id: usize, wal: wral::Wal, entries: Vec<wral::Entry>) -> Result<()> {
+fn reader(id: usize, wal: wral::Wal, entries: Vec<wral::Entry>) {
     let start = time::Instant::now();
     let items: Vec<wral::Entry> = wal.iter().unwrap().map(|x| x.unwrap()).collect();
     assert_eq!(items, entries);
@@ -113,5 +105,4 @@ fn reader(id: usize, wal: wral::Wal, entries: Vec<wral::Entry>) -> Result<()> {
         start.elapsed(),
         items.len()
     );
-    Ok(())
 }

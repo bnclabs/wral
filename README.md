@@ -23,13 +23,13 @@ Goals
   `end-seqno`.
 * [x] `Wal` type is parameterised over a state type `S`. This is helpful for
   using `Wal` type to be used with consensus protocol like [Raft][raft].
-* [x] Concurrent readers and writers into single long instance.
+* [x] Concurrent readers and writers into single log instance.
 
 **Concurrency**
 
 A single log-instance can be cloned and shared among multiple threads
-for concurrent writing and reading. All write operations are serialized,
-while read operations and write-operation are mutually exclusive,
+for concurrent writing and reading. All write operations are serialized.
+While read operations and write-operation are mutually exclusive,
 concurrent reads are allowed.
 
 Contribution

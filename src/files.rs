@@ -23,7 +23,7 @@ pub fn unwrap_filename(file: ffi::OsString) -> Option<(String, usize)> {
         3 => Some((parts.remove(0).to_string(), parts)),
         n if n > 3 => {
             let name: Vec<&str> = parts.drain(..n - 2).collect();
-            Some((name.join("-").to_string(), parts))
+            Some((name.join("-"), parts))
         }
         _ => None,
     }?;
@@ -31,7 +31,7 @@ pub fn unwrap_filename(file: ffi::OsString) -> Option<(String, usize)> {
     match parts[..] {
         ["journal", num] => {
             let num: usize = err_at!(FailConvert, num.parse()).ok()?;
-            Some((name.to_string(), num))
+            Some((name, num))
         }
         _ => None,
     }
