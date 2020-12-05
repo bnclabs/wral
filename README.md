@@ -21,7 +21,7 @@ Goals
   increasing `seqno` order.
 * [x] Range over a subset of entries, specified with `start-seqno` and
   `end-seqno`.
-* [x] `Wal` type is parameterised over a state type `S`. This is helpful for
+* [x] `Wal` type is parameterized over a state type `S`. This is helpful for
   using `Wal` type to be used with consensus protocol like [Raft][raft].
 * [x] Concurrent readers and writers into single log instance.
 

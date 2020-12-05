@@ -14,7 +14,7 @@
 //! by storage (disk, ssd) latency. Latency can get higher when `fsync` is
 //! enabled for every batch flush. With fsync enabled it is hard to reduce
 //! the latency, and to get better throughput applications can do concurrent
-//! writes. This is possbile because [Wal] type can be cloned with underlying
+//! writes. This is possible because [Wal] type can be cloned with underlying
 //! structure safely shared among all the clones. For example,
 //!
 //! ```ignore

@@ -73,7 +73,7 @@ impl Config {
     }
 }
 
-/// Write alhead logging.
+/// Write ahead logging.
 pub struct Wal<S = state::NoState> {
     config: Config,
 
@@ -139,7 +139,7 @@ impl<S> Wal<S> {
     }
 
     /// Load an existing journal under `dir`, matching `name`. Files that
-    /// don't match the journaling file-name structure or journals with
+    /// don't match the journal file-name structure or journals with
     /// corrupted batch or corrupted state shall be ignored.
     ///
     /// Application state shall be loaded from the last batch of the
@@ -226,7 +226,7 @@ impl<S> Wal<S> {
 
 impl<S> Wal<S> {
     /// Iterate over all entries in this Wal instance, entries can span
-    /// scross multiple journal files. Iteration will start from lowest
+    /// across multiple journal files. Iteration will start from lowest
     /// sequence-number to highest.
     pub fn iter(&self) -> Result<impl Iterator<Item = Result<entry::Entry>>> {
         self.range(..)
