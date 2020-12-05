@@ -23,7 +23,7 @@ pub struct Opt {
     #[structopt(long = "threads", default_value = "8")]
     threads: usize,
 
-    #[structopt(long = "size", default_value = "1000000")] // default 1M bytes
+    #[structopt(long = "size", default_value = "10000000")] // default 10M bytes
     journal_limit: usize,
 
     #[structopt(long = "nosync")]

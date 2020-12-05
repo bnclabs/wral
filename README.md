@@ -32,6 +32,41 @@ for concurrent writing and reading. All write operations are serialized.
 While read operations and write-operation are mutually exclusive,
 concurrent reads are allowed.
 
+Performance
+-----------
+
+Single threaded write performance with different payload size and
+`fsync` enabled.
+
+payload |  total-entries | elapsed-time | throughput
+--------|----------------|--------------|------------
+  100   |   10000        |   31s        |  300/s
+  1000  |   10000        |   31s        |  300/s
+  10000 |   10000        |   31s        |  300/s
+  10000 |    1000        |   3.1s       |  300/s
+
+Multi-threaded write performance with constant payload size of
+100-bytes per operation and `fsync` enabled.
+
+threads |  total-entries | elapsed-time | throughput
+--------|----------------|--------------|------------
+  1     |   10000        |  31s         |   300/s
+  2     |   20000        |  60s         |   300/s
+  4     |   40000        |  59s         |   650/s
+  8     |   80000        |  54s         |  1300/s
+  16    |  160000        |  50s         |  3200/s
+
+Multi-threaded read performance with constant payload size of
+100-bytes per operation and `fsync` enabled.
+
+threads |  total-entries | elapsed-time | throughput
+--------|----------------|--------------|------------
+  1     |   10000        |     .15s     |  66000/s
+  2     |   20000        |     .28s     |  71000/s
+  4     |   40000        |     .38s     | 105000/s
+  8     |   80000        |     .62s     | 130000/s
+  16    |  160000        |    1.10s     | 150000/s 
+
 Contribution
 ------------
 
