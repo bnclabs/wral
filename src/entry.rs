@@ -44,7 +44,7 @@ impl Ord for Entry {
 }
 
 impl Entry {
-    const ID: u64 = 0x0;
+    const ID: u32 = 0x0;
 
     #[inline]
     pub fn new(seqno: u64, op: Vec<u8>) -> Entry {

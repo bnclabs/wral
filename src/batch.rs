@@ -152,7 +152,7 @@ impl Ord for Batch {
 }
 
 impl Batch {
-    const ID: u64 = 0x0;
+    const ID: u32 = 0x0;
 
     pub fn from_index(index: Index, file: &mut fs::File) -> Result<Batch> {
         err_at!(IOError, file.seek(io::SeekFrom::Start(index.fpos)))?;

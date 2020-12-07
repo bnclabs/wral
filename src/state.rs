@@ -17,7 +17,7 @@ pub trait State: 'static + Clone + Sync + Send + IntoCbor + FromCbor {
 pub struct NoState;
 
 impl NoState {
-    const ID: u64 = 0x0;
+    const ID: u32 = 0x0;
 }
 
 impl State for NoState {
