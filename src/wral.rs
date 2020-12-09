@@ -199,7 +199,7 @@ impl<S> Wal<S> {
         match Arc::try_unwrap(self.t) {
             Ok(t) => {
                 mem::drop(self.tx);
-                (err_at!(IPCFail, t.into_inner())?.close_wait()?)?;
+                (err_at!(IPCFail, t.into_inner())?.join()?)?;
 
                 match Arc::try_unwrap(self.w) {
                     Ok(w) => {
