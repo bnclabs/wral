@@ -1,6 +1,7 @@
 Release Checklist
 =================
 
+* Check and verify serialization `ID` for Cborized types.
 * Documentation Review.
 * Bump up the version:
   * __major__: backward incompatible API changes.
