@@ -1,13 +1,12 @@
-[![Rustdoc](https://img.shields.io/badge/rustdoc-hosted-blue.svg)](https://docs.rs/wral)
+[![Documentation](https://docs.rs/wral/badge.svg?style=flat-square)](https://docs.rs/wral)
 
 _Write ahead logging for rust applications_. Write ahead logging is a
-crucial component for applications requiring data persistence and durability.
-Many times it is inefficient to flush and sync new data (or modifications
-to existing data) to on-disk data-structures, like an index.
-Write-ahead-logging facilitates by ingesting write operations by appending
-and syncing it to disk and allows applications to pre-process a batch of
-write-operations and write them to on-disk structures in the most efficient
-manner.
+crucial component for applications requiring data durability. Many times it
+is inefficient to flush and sync new data (or modifications to existing data)
+to on-disk data-structures, like an index. Write-ahead-logging facilitates
+by ingesting write operations by appending and syncing it to disk and allows
+applications to pre-process a batch of write-operations and write them to
+on-disk structures in the most efficient manner.
 
 Goals
 -----
