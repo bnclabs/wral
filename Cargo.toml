@@ -16,7 +16,7 @@ name = "perf"
 required-features = ["perf"]
 
 [dependencies]
-mkit = { path = "../mkit", version = "0.1.0" }
+mkit = { path = "../mkit", version = "0.2.0" }
 log = "0.4"
 arbitrary = { version = "0.4", features = ["derive"] }
 tempfile = "3"
