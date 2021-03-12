@@ -59,7 +59,8 @@ fn test_journal() {
     assert_eq!(entries, jn_entries);
 
     {
-        let (load_jn, _) = Journal::<state::NoState>::load(name, &jn.to_file_path()).unwrap();
+        let (load_jn, _) =
+            Journal::<state::NoState>::load(name, &jn.to_file_path()).unwrap();
         let iter = RdJournal::from_journal(&load_jn, 0..=u64::MAX).unwrap();
         let jn_entries: Vec<entry::Entry> = iter.map(|x| x.unwrap()).collect();
         let entries = entries[..offset].to_vec();

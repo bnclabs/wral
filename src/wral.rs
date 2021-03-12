@@ -113,7 +113,9 @@ impl<S> Wal<S> {
             match Journal::<S>::load_cold(&config.name, file_path.as_ref()) {
                 Some(journal) => match journal.purge() {
                     Ok(_) => (),
-                    Err(err) => debug!(target: "wral", "failed to purge {:?}, {}", file_path, err),
+                    Err(err) => {
+                        debug!(target: "wral", "failed to purge {:?}, {}", file_path, err)
+                    }
                 },
                 None => continue,
             };

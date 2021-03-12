@@ -57,15 +57,16 @@ impl<S> Writer<S> {
         }));
         let name = format!("wral-writer-{}", config.name);
         let thread_w = Arc::clone(&w);
-        let (t, tx) =
-            thread::Thread::new_sync(&name, wral::SYNC_BUFFER, move |rx: thread::Rx<Req, Res>| {
-                MainLoop {
-                    config,
-                    seqno,
-                    w: thread_w,
-                    rx,
-                }
-            });
+        let (t, tx) = thread::Thread::new_sync(
+            &name,
+            wral::SYNC_BUFFER,
+            move |rx: thread::Rx<Req, Res>| MainLoop {
+                config,
+                seqno,
+                w: thread_w,
+                rx,
+            },
+        );
 
         (w, t, tx)
     }

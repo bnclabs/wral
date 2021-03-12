@@ -45,7 +45,12 @@ enum InnerJournal<S> {
 }
 
 impl<S> Journal<S> {
-    pub fn start(name: &str, dir: &ffi::OsStr, num: usize, state: S) -> Result<Journal<S>> {
+    pub fn start(
+        name: &str,
+        dir: &ffi::OsStr,
+        num: usize,
+        state: S,
+    ) -> Result<Journal<S>> {
         let file_path: path::PathBuf = {
             let file: ffi::OsString = files::make_filename(name.to_string(), num);
             [dir, &file].iter().collect()
@@ -81,7 +86,8 @@ impl<S> Journal<S> {
             return None;
         }
 
-        let mut file = err_at!(IOError, fs::OpenOptions::new().read(true).open(os_file)).ok()?;
+        let mut file =
+            err_at!(IOError, fs::OpenOptions::new().read(true).open(os_file)).ok()?;
 
         let mut state = vec![];
         let mut index = vec![];
@@ -221,7 +227,9 @@ impl<S> Journal<S> {
         match &self.inner {
             InnerJournal::Working { worker, .. } => worker.to_last_seqno(),
             InnerJournal::Archive { index, .. } if index.is_empty() => None,
-            InnerJournal::Archive { index, .. } => index.last().map(batch::Index::to_last_seqno),
+            InnerJournal::Archive { index, .. } => {
+                index.last().map(batch::Index::to_last_seqno)
+            }
             _ => None,
         }
     }
@@ -269,7 +277,9 @@ impl RdJournal {
         range: ops::RangeInclusive<u64>,
     ) -> Result<RdJournal> {
         let (index, entries) = match &journal.inner {
-            InnerJournal::Working { worker, .. } => (worker.to_index(), worker.to_entries()),
+            InnerJournal::Working { worker, .. } => {
+                (worker.to_index(), worker.to_entries())
+            }
             InnerJournal::Archive { index, .. } => (index.to_vec(), vec![]),
             InnerJournal::Cold => unreachable!(),
         };
@@ -315,10 +325,7 @@ impl Iterator for RdJournal {
                     }
                     Err(err) => Some(Err(err)),
                 },
-                None => match self.entries.next() {
-                    Some(entry) => Some(Ok(entry)),
-                    None => None,
-                },
+                None => self.entries.next().map(Ok),
             },
         }
     }

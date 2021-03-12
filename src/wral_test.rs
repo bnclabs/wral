@@ -80,7 +80,8 @@ fn reader(_id: u128, wal: Wal, ops: usize, seed: u128, entries: Vec<entry::Entry
     for _i in 0..ops {
         match rng.gen::<u8>() % 2 {
             0 => {
-                let items: Vec<entry::Entry> = wal.iter().unwrap().map(|x| x.unwrap()).collect();
+                let items: Vec<entry::Entry> =
+                    wal.iter().unwrap().map(|x| x.unwrap()).collect();
                 assert_eq!(items, entries);
             }
             1 => {

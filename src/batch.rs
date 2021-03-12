@@ -177,7 +177,10 @@ impl Batch {
         self.last_seqno
     }
 
-    pub fn into_iter(self, range: ops::RangeInclusive<u64>) -> vec::IntoIter<entry::Entry> {
+    pub fn into_iter(
+        self,
+        range: ops::RangeInclusive<u64>,
+    ) -> vec::IntoIter<entry::Entry> {
         self.entries
             .into_iter()
             .filter(|e| range.contains(&e.to_seqno()))

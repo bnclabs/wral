@@ -89,7 +89,7 @@ fn test_batch() {
             seqno,
             batch.first_seqno
         );
-        assert!(batch.first_seqno <= batch.last_seqno, batch);
+        assert!(batch.first_seqno <= batch.last_seqno, "{}", batch);
         seqno = batch.first_seqno
     }
 }
