@@ -3,20 +3,26 @@ name = "wral"
 version = "0.1.0"
 description = "Write ahead logging for durability"
 repository = "https://github.com/bnclabs/wral"
+documentation = "https://docs.rs/wral/"
 keywords = ["wal", "db", "database"]
 categories = ["concurrency", "database", "filesystem"]
 authors = ["prataprc <prataprc@gmail.com>"]
 license = "MIT"
-readme = "README.md"
-documentation = "https://docs.rs/wral/"
 edition = "2018"
+readme = "README.md"
+
+[profile.release]
+debug = true
+
+[profile.bench]
+debug = true
 
 [[bin]]
 name = "perf"
 required-features = ["perf"]
 
 [dependencies]
-mkit = { path = "../mkit", version = "0.3.0" }
+mkit = { path = "../mkit", version = "0.4.0" }
 log = "0.4"
 arbitrary = { version = "0.4", features = ["derive"] }
 tempfile = "3"

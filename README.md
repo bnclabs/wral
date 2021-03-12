@@ -69,9 +69,12 @@ threads |  total-entries | elapsed-time | throughput
 Contribution
 ------------
 
-* Simple workflow. Fork, modify and raise a pull request.
-* Before making a PR,
+* Simple workflow. Fork - Modify - Pull request.
+* Before creating a PR,
+  * Run `make build` to confirm all versions of build is passing with
+    0 warnings and 0 errors.
   * Run `check.sh` with 0 warnings, 0 errors and all testcases passing.
+  * Run `perf.sh` with 0 warnings, 0 errors and all testcases passing.
   * [Install][spellcheck] and run `cargo spellcheck` to remove common spelling mistakes.
 * [Developer certificate of origin][dco] is preferred.
 
