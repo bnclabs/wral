@@ -14,7 +14,7 @@ build:
 	# ... meta commands ...
 	cargo +nightly clippy --all-targets --all-features
 flamegraph:
-	cargo flamegraph --features=perf --release --bin=perf -- --payload 100 --ops 10000 --threads 1 --size 100000000
+	cargo flamegraph --features=perf --bin=perf -- --payload 100 --ops 10000 --threads 1 --size 100000000
 prepare:
 	check.sh
 	perf.sh
