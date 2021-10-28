@@ -13,7 +13,10 @@ exec_prg() {
         date; time cargo +nightly test --release -- --nocapture || exit $?
         date; time cargo +nightly test -- --nocapture || exit $?
         date; time cargo +nightly bench -- --nocapture || exit $?
-        # repeat this for stable, once package is ready for stable
+        # repeat this for stable
+        date; time cargo test --release -- --nocapture || exit $?
+        date; time cargo test -- --nocapture || exit $?
+        date; time cargo bench -- --nocapture || exit $?
     done
 }
 

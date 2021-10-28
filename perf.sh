@@ -5,9 +5,13 @@ exec 2>&1
 
 set -o xtrace
 
-PERF=$HOME/.cargo/target/release/perf
+if [ -f ./target/release/perf ] then
+    PERF=./target/release/perf
+else
+    PERF=$HOME/.cargo/target/release/perf
+fi
 
-date; time cargo +nightly bench || exit $?
+date; time cargo bench || exit $?
 
 # Single threaded, with 100-bytes, 1K, 10K, 1M payload, with fsync true.
 date; time cargo run --bin perf --features=perf -- --payload 100 --ops 10000 --threads 1 --size 100000000

@@ -60,11 +60,16 @@ impl<S> Writer<S> {
         let (t, tx) = thread::Thread::new_sync(
             &name,
             wral::SYNC_BUFFER,
-            move |rx: thread::Rx<Req, Res>| MainLoop {
-                config,
-                seqno,
-                w: thread_w,
-                rx,
+            move |rx: thread::Rx<Req, Res>| {
+                || {
+                    let l = MainLoop {
+                        config,
+                        seqno,
+                        w: thread_w,
+                        rx,
+                    };
+                    l.run()
+                }
             },
         );
 
@@ -105,13 +110,11 @@ struct MainLoop<S> {
     rx: thread::Rx<Req, Res>,
 }
 
-impl<S> FnOnce<()> for MainLoop<S>
+impl<S> MainLoop<S>
 where
     S: Clone + IntoCbor + FromCbor + state::State,
 {
-    type Output = Result<u64>;
-
-    extern "rust-call" fn call_once(self, _args: ()) -> Self::Output {
+    fn run(self) -> Result<u64> {
         use std::sync::mpsc::TryRecvError;
 
         // block for the first request.
