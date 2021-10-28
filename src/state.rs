@@ -8,12 +8,12 @@ use crate::wral::Wal;
 use crate::{entry::Entry, Result};
 
 /// Callback trait for updating application state in relation to [Wal] type.
-pub trait State: 'static + Clone + Sync + Send + IntoCbor + FromCbor {
+pub trait State: 'static + Clone + Sync + Send + IntoCbor + FromCbor + Default {
     fn on_add_entry(&mut self, new_entry: &Entry) -> Result<()>;
 }
 
 /// Default parameter, implementing [State] trait, for [Wal] type.
-#[derive(Clone, Eq, PartialEq, Debug, Cborize)]
+#[derive(Clone, Eq, PartialEq, Debug, Cborize, Default)]
 pub struct NoState;
 
 impl NoState {
