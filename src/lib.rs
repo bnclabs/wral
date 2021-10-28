@@ -39,9 +39,6 @@
 //! operations shall block concurrent writes and vice-versa. But concurrent
 //! reads shall be allowed.
 
-#![feature(unboxed_closures)]
-#![feature(fn_traits)]
-
 use std::{error, fmt, result};
 
 // Short form to compose Error values.
