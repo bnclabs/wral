@@ -1,16 +1,14 @@
 use arbitrary::Unstructured;
-use rand::{prelude::random, rngs::SmallRng, Rng, SeedableRng};
+use rand::{prelude::random, rngs::StdRng, Rng, SeedableRng};
 
 use super::*;
 use crate::state;
 
 #[test]
 fn test_journal() {
-    let seeds: Vec<u128> = vec![193003787382804392805109954488729196323, random()];
-    let seed = seeds[random::<usize>() % seeds.len()];
-    // let seed: u128 = 148484157541144179681685363423689665370;
+    let seed: u64 = random();
     println!("test_journal {}", seed);
-    let mut rng = SmallRng::from_seed(seed.to_le_bytes());
+    let mut rng = StdRng::seed_from_u64(seed);
 
     let name = "test_journal";
     let dir = tempfile::tempdir().unwrap();

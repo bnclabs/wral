@@ -3,7 +3,7 @@ use mkit::{
     self,
     {cbor::FromCbor, cbor::IntoCbor},
 };
-use rand::{prelude::random, rngs::SmallRng, Rng, SeedableRng};
+use rand::{prelude::random, rngs::StdRng, Rng, SeedableRng};
 
 use super::*;
 
@@ -11,9 +11,9 @@ use super::*;
 fn test_entry() {
     use mkit::cbor::Cbor;
 
-    let seed: u128 = random();
+    let seed: u64 = random();
     println!("test_entry {}", seed);
-    let mut rng = SmallRng::from_seed(seed.to_le_bytes());
+    let mut rng = StdRng::seed_from_u64(seed);
 
     let mut entries: Vec<Entry> = (0..1000)
         .map(|_i| {

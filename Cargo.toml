@@ -28,10 +28,10 @@ arbitrary = { version = "0.4", features = ["derive"] }
 tempfile = "3"
 
 structopt = { version = "0.3.20", default-features = false, optional = true }
-rand = { version = "0.7.3", features = ["small_rng"], optional = true }
+rand = { version = "0.8.4", features = ["std_rng"], optional = true }
 
 [dev-dependencies]
-rand = { version = "0.7.3", features = ["small_rng"]}
+rand = { version = "0.8.4", features = ["std_rng"]}
 
 [features]
 perf = ["structopt", "rand"]

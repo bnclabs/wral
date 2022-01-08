@@ -1,14 +1,14 @@
 use arbitrary::Unstructured;
 use mkit::cbor::IntoCbor;
-use rand::{prelude::random, rngs::SmallRng, Rng, SeedableRng};
+use rand::{prelude::random, rngs::StdRng, Rng, SeedableRng};
 
 use super::*;
 
 #[test]
 fn test_index() {
-    let seed: u128 = random();
+    let seed: u64 = random();
     println!("test_index {}", seed);
-    let mut rng = SmallRng::from_seed(seed.to_le_bytes());
+    let mut rng = StdRng::seed_from_u64(seed);
 
     let index: Index = {
         let bytes = rng.gen::<[u8; 32]>();
@@ -29,18 +29,9 @@ fn test_index() {
 
 #[test]
 fn test_batch() {
-    let seeds: Vec<u128> = vec![
-        225569602694000826843969627559726108824,
-        214504593551397116282345381712716803483,
-        177121329091129258928668221088480874568,
-        random(),
-        random(),
-        random(),
-    ];
-    let seed = seeds[random::<usize>() % seeds.len()];
-    // let seed: u128 = 214504593551397116282345381712716803483;
+    let seed: u64 = random();
     println!("test_batch {}", seed);
-    let mut rng = SmallRng::from_seed(seed.to_le_bytes());
+    let mut rng = StdRng::seed_from_u64(seed);
 
     let mut batches = vec![];
     for _i in 0..1000 {
@@ -98,11 +89,9 @@ fn test_batch() {
 fn test_worker() {
     use crate::state;
 
-    let seeds: Vec<u128> = vec![148484157541144179681685363423689665370, random()];
-    let seed = seeds[random::<usize>() % seeds.len()];
-    // let seed: u128 = 148484157541144179681685363423689665370;
+    let seed: u64 = random();
     println!("test_worker {}", seed);
-    let mut rng = SmallRng::from_seed(seed.to_le_bytes());
+    let mut rng = StdRng::seed_from_u64(seed);
 
     let mut file = {
         let ntf = tempfile::NamedTempFile::new().unwrap();
