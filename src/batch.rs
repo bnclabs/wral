@@ -204,12 +204,7 @@ pub struct Index {
 
 impl Index {
     pub fn new(fpos: u64, length: usize, first_seqno: u64, last_seqno: u64) -> Index {
-        Index {
-            fpos,
-            length,
-            first_seqno,
-            last_seqno,
-        }
+        Index { fpos, length, first_seqno, last_seqno }
     }
 
     #[inline]

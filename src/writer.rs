@@ -62,12 +62,7 @@ impl<S> Writer<S> {
             wral::SYNC_BUFFER,
             move |rx: thread::Rx<Req, Res>| {
                 || {
-                    let l = MainLoop {
-                        config,
-                        seqno,
-                        w: thread_w,
-                        rx,
-                    };
+                    let l = MainLoop { config, seqno, w: thread_w, rx };
                     l.run()
                 }
             },

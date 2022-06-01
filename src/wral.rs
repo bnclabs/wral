@@ -42,12 +42,7 @@ impl Arbitrary for Config {
         let journal_limit = *u.choose(&[100, 1000, 10_000, 1_000_000])?;
         let fsync: bool = u.arbitrary()?;
 
-        let config = Config {
-            name,
-            dir,
-            journal_limit,
-            fsync,
-        };
+        let config = Config { name, dir, journal_limit, fsync };
         Ok(config)
     }
 }
@@ -129,13 +124,7 @@ impl<S> Wal<S> {
         let seqno = 1;
         let (w, t, tx) = writer::Writer::start(config.clone(), vec![], journal, seqno);
 
-        let val = Wal {
-            config,
-
-            tx,
-            t: Arc::new(RwLock::new(t)),
-            w,
-        };
+        let val = Wal { config, tx, t: Arc::new(RwLock::new(t)), w };
 
         Ok(val)
     }
@@ -185,13 +174,7 @@ impl<S> Wal<S> {
         let journals: Vec<Journal<S>> = journals.into_iter().map(|(j, _, _)| j).collect();
         let (w, t, tx) = writer::Writer::start(config.clone(), journals, journal, seqno);
 
-        let val = Wal {
-            config,
-
-            tx,
-            t: Arc::new(RwLock::new(t)),
-            w,
-        };
+        let val = Wal { config, tx, t: Arc::new(RwLock::new(t)), w };
 
         Ok(val)
     }
@@ -253,10 +236,7 @@ impl<S> Wal<S> {
             None => vec![],
         };
 
-        Ok(Iter {
-            journal: None,
-            journals: journals.into_iter(),
-        })
+        Ok(Iter { journal: None, journals: journals.into_iter() })
     }
 
     fn range_bound_to_range_inclusive<R>(range: R) -> Option<ops::RangeInclusive<u64>>

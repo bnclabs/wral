@@ -68,10 +68,7 @@ impl<S> Journal<S> {
             name: name.to_string(),
             num,
             file_path: file_path.into_os_string(),
-            inner: InnerJournal::Working {
-                worker: batch::Worker::new(state),
-                file,
-            },
+            inner: InnerJournal::Working { worker: batch::Worker::new(state), file },
         })
     }
 
@@ -131,10 +128,7 @@ impl<S> Journal<S> {
             name: name.to_string(),
             num,
             file_path: file_path.to_os_string(),
-            inner: InnerJournal::Archive {
-                index,
-                state: state.clone(),
-            },
+            inner: InnerJournal::Archive { index, state: state.clone() },
         };
 
         Some((journal, state))
@@ -164,10 +158,7 @@ impl<S> Journal<S> {
         let (inner, entries, state) = match self.inner {
             InnerJournal::Working { worker, .. } => {
                 let (index, entries, state) = worker.unwrap();
-                let inner = InnerJournal::Archive {
-                    index,
-                    state: state.clone(),
-                };
+                let inner = InnerJournal::Archive { index, state: state.clone() };
                 (inner, entries, state)
             }
             _ => unreachable!(),
@@ -301,13 +292,7 @@ impl RdJournal {
             err_at!(IOError, opts.read(true).open(&journal.file_path))?
         };
 
-        Ok(RdJournal {
-            range,
-            batch,
-            index,
-            entries,
-            file,
-        })
+        Ok(RdJournal { range, batch, index, entries, file })
     }
 }
 

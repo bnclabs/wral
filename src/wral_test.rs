@@ -26,9 +26,8 @@ fn test_wal() {
     let mut writers = vec![];
     for id in 0..n_threads {
         let wal = val.clone();
-        writers.push(std::thread::spawn(move || {
-            writer(id, wal, 1000, seed + (id as u64))
-        }));
+        writers
+            .push(std::thread::spawn(move || writer(id, wal, 1000, seed + (id as u64))));
     }
 
     let mut entries: Vec<Vec<entry::Entry>> = vec![];

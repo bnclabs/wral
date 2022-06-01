@@ -36,9 +36,7 @@ fn main() {
     let seed = opts.seed.unwrap_or_else(random);
 
     let mut config = wral::Config::new(&opts.name, dir.path().as_os_str());
-    config
-        .set_journal_limit(opts.journal_limit)
-        .set_fsync(!opts.nosync);
+    config.set_journal_limit(opts.journal_limit).set_fsync(!opts.nosync);
     println!("{:?}", config);
 
     let wal = wral::Wal::create(config, wral::NoState).unwrap();
@@ -85,12 +83,7 @@ fn writer(id: usize, wal: wral::Wal, opts: Opt, _seed: u128) -> Vec<wral::Entry>
         entries.push(wral::Entry::new(seqno, op.clone()));
     }
 
-    println!(
-        "w-{:02} took {:?} to write {} ops",
-        id,
-        start.elapsed(),
-        opts.ops
-    );
+    println!("w-{:02} took {:?} to write {} ops", id, start.elapsed(), opts.ops);
     entries
 }
 
@@ -99,10 +92,5 @@ fn reader(id: usize, wal: wral::Wal, entries: Vec<wral::Entry>) {
     let items: Vec<wral::Entry> = wal.iter().unwrap().map(|x| x.unwrap()).collect();
     assert_eq!(items, entries);
 
-    println!(
-        "r-{:02} took {:?} to iter {} ops",
-        id,
-        start.elapsed(),
-        items.len()
-    );
+    println!("r-{:02} took {:?} to iter {} ops", id, start.elapsed(), items.len());
 }

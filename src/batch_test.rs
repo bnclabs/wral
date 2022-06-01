@@ -18,12 +18,7 @@ fn test_index() {
     assert_eq!(index.to_first_seqno(), index.first_seqno);
     assert_eq!(index.to_first_seqno(), index.first_seqno);
 
-    let val = Index::new(
-        index.fpos,
-        index.length,
-        index.first_seqno,
-        index.last_seqno,
-    );
+    let val = Index::new(index.fpos, index.length, index.first_seqno, index.last_seqno);
     assert_eq!(index, val);
 }
 
@@ -46,10 +41,7 @@ fn test_batch() {
         assert_eq!(batch.to_first_seqno(), batch.first_seqno);
         assert_eq!(batch.to_last_seqno(), batch.last_seqno);
         assert_eq!(
-            batch
-                .clone()
-                .into_iter(0..=u64::MAX)
-                .collect::<Vec<entry::Entry>>(),
+            batch.clone().into_iter(0..=u64::MAX).collect::<Vec<entry::Entry>>(),
             batch.entries
         );
 
@@ -65,21 +57,14 @@ fn test_batch() {
         assert_eq!(batch, rbatch);
     }
 
-    let mut batches: Vec<Batch> = batches
-        .into_iter()
-        .filter(|b| b.entries.is_empty())
-        .collect();
+    let mut batches: Vec<Batch> =
+        batches.into_iter().filter(|b| b.entries.is_empty()).collect();
     batches.sort();
     batches.dedup_by(|a, b| a.first_seqno == b.first_seqno);
 
     let mut seqno = 0;
     for batch in batches.into_iter() {
-        assert!(
-            seqno <= batch.first_seqno,
-            "{} {}",
-            seqno,
-            batch.first_seqno
-        );
+        assert!(seqno <= batch.first_seqno, "{} {}", seqno, batch.first_seqno);
         assert!(batch.first_seqno <= batch.last_seqno, "{}", batch);
         seqno = batch.first_seqno
     }
